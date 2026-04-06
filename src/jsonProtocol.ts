@@ -84,10 +84,17 @@ export function parseAgentEnvelope(rawText: string): AgentEnvelope {
   try {
     const parsed = JSON.parse(candidate) as Record<string, unknown>;
 
-    if (parsed.type === 'message' && typeof parsed.message === 'string') {
+    if (parsed.type === 'message' && parsed.message !== undefined) {
+      if (typeof parsed.message === 'string') {
+        return {
+          type: 'message',
+          message: parsed.message,
+        };
+      }
+
       return {
         type: 'message',
-        message: parsed.message,
+        message: JSON.stringify(parsed.message, null, 2),
       };
     }
 
