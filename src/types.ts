@@ -18,7 +18,12 @@ export interface AgentConfig {
   temperature: number;
 }
 
-export type ToolName = 'read_file' | 'search_files' | 'write_patch' | 'run_shell';
+export type ToolName =
+  | 'list_files'
+  | 'read_file'
+  | 'search_files'
+  | 'write_patch'
+  | 'run_shell';
 
 export interface ToolExecutionResult {
   ok: boolean;

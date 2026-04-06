@@ -1,10 +1,16 @@
 import { exec as execCallback } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-import { isSearchableTextFile, relativeToRoot, resolvePathInsideRoot, walkFiles } from './pathUtils.js';
+import {
+  isSearchableTextFile,
+  relativeToRoot,
+  resolvePathInsideRoot,
+  shouldIgnoreDirectory,
+  walkFiles,
+} from './pathUtils.js';
 
 import type { ToolContext, ToolDefinition, ToolExecutionResult } from './types.js';
 
@@ -71,6 +77,110 @@ function countOccurrences(source: string, target: string): number {
     count += 1;
     startIndex = foundIndex + target.length;
   }
+}
+
+async function buildTreeLines(
+  rootDir: string,
+  currentPath: string,
+  depth: number,
+  maxDepth: number,
+  includeFiles: boolean,
+  includeDirectories: boolean,
+  maxEntries: number,
+  lines: string[]
+): Promise<void> {
+  if (lines.length >= maxEntries) {
+    return;
+  }
+
+  const entries = await readdir(currentPath, { withFileTypes: true });
+  entries.sort((left, right) => {
+    if (left.isDirectory() && !right.isDirectory()) {
+      return -1;
+    }
+    if (!left.isDirectory() && right.isDirectory()) {
+      return 1;
+    }
+    return left.name.localeCompare(right.name);
+  });
+
+  for (const entry of entries) {
+    if (lines.length >= maxEntries) {
+      return;
+    }
+
+    if (entry.isDirectory() && shouldIgnoreDirectory(entry.name)) {
+      continue;
+    }
+
+    const absolutePath = path.join(currentPath, entry.name);
+    const relativePath = relativeToRoot(rootDir, absolutePath);
+    const indent = '  '.repeat(depth);
+
+    if (entry.isDirectory()) {
+      if (includeDirectories) {
+        lines.push(`${indent}${entry.name}/`);
+      }
+
+      if (depth < maxDepth) {
+        await buildTreeLines(
+          rootDir,
+          absolutePath,
+          depth + 1,
+          maxDepth,
+          includeFiles,
+          includeDirectories,
+          maxEntries,
+          lines
+        );
+      }
+
+      continue;
+    }
+
+    if (includeFiles) {
+      lines.push(`${indent}${entry.name}`);
+    }
+
+    if (relativePath === '.') {
+      return;
+    }
+  }
+}
+
+async function runListFiles(args: Record<string, unknown>, context: ToolContext): Promise<ToolExecutionResult> {
+  const basePathInput = getString(args, 'path') || '.';
+  const basePath = resolvePathInsideRoot(context.config.workdir, basePathInput);
+  const maxDepth = Math.max(0, Math.min(6, Math.floor(getNumber(args, 'maxDepth', 2))));
+  const maxEntries = Math.max(1, Math.min(400, Math.floor(getNumber(args, 'maxEntries', 120))));
+  const includeFiles = getBoolean(args, 'includeFiles', true);
+  const includeDirectories = getBoolean(args, 'includeDirectories', true);
+  const lines: string[] = [`${relativeToRoot(context.config.workdir, basePath)}/`];
+
+  await buildTreeLines(
+    context.config.workdir,
+    basePath,
+    1,
+    maxDepth,
+    includeFiles,
+    includeDirectories,
+    maxEntries,
+    lines
+  );
+
+  const capped = lines.length >= maxEntries;
+
+  return {
+    ok: true,
+    summary: `Listed ${Math.max(0, lines.length - 1)} entries under ${relativeToRoot(context.config.workdir, basePath)} up to depth ${maxDepth}${capped ? ' (capped)' : ''}.`,
+    output: lines.join('\n'),
+    metadata: {
+      path: relativeToRoot(context.config.workdir, basePath),
+      maxDepth,
+      maxEntries,
+      capped,
+    },
+  };
 }
 
 async function runReadFile(args: Record<string, unknown>, context: ToolContext): Promise<ToolExecutionResult> {
@@ -277,6 +387,15 @@ async function runShell(args: Record<string, unknown>, context: ToolContext): Pr
 
 export function createTools(): ToolDefinition[] {
   return [
+    {
+      name: 'list_files',
+      description:
+        'List directories and files as a small tree. Use this first when the user asks about project structure.',
+      inputShape:
+        '{ "path": ".", "maxDepth": 2, "maxEntries": 120, "includeFiles": true, "includeDirectories": true }',
+      requiresApproval: false,
+      run: runListFiles,
+    },
     {
       name: 'read_file',
       description: 'Read a text file from the current workdir. Supports line ranges.',

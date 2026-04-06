@@ -6,7 +6,8 @@ Current goals:
 
 - Use local models through `Ollama`
 - Use remote models through any `OpenAI-compatible` chat-completions API
-- Let the model call four core coding tools:
+- Let the model call five core coding tools:
+  - `list_files`
   - `read_file`
   - `search_files`
   - `write_patch`
@@ -96,6 +97,13 @@ npm run dev
 - `/workdir <path>`
 - `/approve on|off`
 - `/quit`
+
+## Good first prompts
+
+- `Summarize this project structure in Korean.`
+- `Find the main entrypoint of this project and explain the execution flow in Korean.`
+- `Read package.json and README.md, then explain how to run this project.`
+- `Search for all files related to config parsing and summarize them.`
 
 ## Remote API mode
 

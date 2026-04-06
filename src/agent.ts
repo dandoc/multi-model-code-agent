@@ -43,6 +43,12 @@ export class AgentRunner {
     ];
   }
 
+  private isStructureQuestion(userInput: string): boolean {
+    return /project structure|directory structure|architecture|entrypoint|entry point|file layout|구조|아키텍처|엔트리포인트|프로젝트 요약/i.test(
+      userInput
+    );
+  }
+
   private async executeTool(tool: ToolDefinition, args: Record<string, unknown>): Promise<ToolExecutionResult> {
     const needsApproval = tool.requiresApproval && !this.config.autoApprove;
 
@@ -78,11 +84,42 @@ export class AgentRunner {
     }
   }
 
+  private async maybeBootstrapStructureContext(userInput: string): Promise<void> {
+    if (!this.isStructureQuestion(userInput)) {
+      return;
+    }
+
+    const listFilesTool = this.toolMap.get('list_files');
+    if (!listFilesTool) {
+      return;
+    }
+
+    this.ui.log('Bootstrapping structure context with list_files...');
+    const result = await this.executeTool(listFilesTool, {
+      path: '.',
+      maxDepth: 2,
+      maxEntries: 160,
+      includeFiles: true,
+      includeDirectories: true,
+    });
+
+    this.history.push({
+      role: 'user',
+      content: [
+        'Structure bootstrap for the current workspace.',
+        'Use this real file tree instead of guessing.',
+        formatToolResultForModel('list_files', result),
+      ].join('\n\n'),
+    });
+  }
+
   async runTurn(userInput: string): Promise<string> {
     this.history.push({
       role: 'user',
       content: userInput,
     });
+
+    await this.maybeBootstrapStructureContext(userInput);
 
     for (let step = 1; step <= this.config.maxTurns; step += 1) {
       const rawResponse = await this.adapter.complete(this.buildMessages(), this.config);

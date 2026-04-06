@@ -13,6 +13,10 @@ const IGNORED_DIRECTORIES = new Set([
   '.vscode',
 ]);
 
+export function shouldIgnoreDirectory(name: string): boolean {
+  return IGNORED_DIRECTORIES.has(name);
+}
+
 function normalizeForComparison(input: string): string {
   return path.resolve(input).toLowerCase();
 }
@@ -61,7 +65,7 @@ export async function walkFiles(rootDir: string): Promise<string[]> {
       const absolutePath = path.join(current, entry.name);
 
       if (entry.isDirectory()) {
-        if (!IGNORED_DIRECTORIES.has(entry.name)) {
+        if (!shouldIgnoreDirectory(entry.name)) {
           queue.push(absolutePath);
         }
         continue;
