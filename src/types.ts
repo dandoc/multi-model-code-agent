@@ -21,6 +21,7 @@ export interface AgentConfig {
 export type ToolName =
   | 'list_files'
   | 'read_file'
+  | 'read_multiple_files'
   | 'search_files'
   | 'write_patch'
   | 'run_shell';

@@ -38,6 +38,27 @@ function getBoolean(args: Record<string, unknown>, key: string, fallback = false
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function getStringArray(
+  args: Record<string, unknown>,
+  key: string,
+  options?: { required?: boolean }
+): string[] {
+  const value = args[key];
+  const items = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+
+  if (items.length > 0) {
+    return items;
+  }
+
+  if (options?.required) {
+    throw new Error(`Missing required string array field: ${key}`);
+  }
+
+  return [];
+}
+
 function getNumber(args: Record<string, unknown>, key: string, fallback: number): number {
   const value = args[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -205,6 +226,50 @@ async function runReadFile(args: Record<string, unknown>, context: ToolContext):
   };
 }
 
+async function runReadMultipleFiles(
+  args: Record<string, unknown>,
+  context: ToolContext
+): Promise<ToolExecutionResult> {
+  const requestedPaths = getStringArray(args, 'paths', { required: true });
+  const maxFiles = Math.max(1, Math.min(12, Math.floor(getNumber(args, 'maxFiles', 6))));
+  const startLine = Math.max(1, Math.floor(getNumber(args, 'startLine', 1)));
+  const maxLinesPerFile = Math.max(
+    20,
+    Math.min(400, Math.floor(getNumber(args, 'maxLinesPerFile', 180)))
+  );
+  const selectedPaths = requestedPaths.slice(0, maxFiles);
+  const chunks: string[] = [];
+  const readPaths: string[] = [];
+
+  for (const requestedPath of selectedPaths) {
+    const absolutePath = resolvePathInsideRoot(context.config.workdir, requestedPath);
+    const raw = await readFile(absolutePath, 'utf8');
+    const totalLines = raw.split(/\r?\n/).length;
+    const endLine = Math.min(totalLines, startLine + maxLinesPerFile - 1);
+
+    readPaths.push(relativeToRoot(context.config.workdir, absolutePath));
+    chunks.push(
+      [
+        `=== FILE: ${relativeToRoot(context.config.workdir, absolutePath)} ===`,
+        formatLines(raw, startLine, endLine),
+      ].join('\n')
+    );
+  }
+
+  return {
+    ok: true,
+    summary: `Read ${readPaths.length} file${readPaths.length === 1 ? '' : 's'}: ${readPaths.join(', ')}.`,
+    output: chunks.join('\n\n'),
+    metadata: {
+      paths: readPaths,
+      startLine,
+      maxLinesPerFile,
+      truncatedFileCount:
+        requestedPaths.length > selectedPaths.length ? requestedPaths.length - selectedPaths.length : 0,
+    },
+  };
+}
+
 async function runSearchFiles(args: Record<string, unknown>, context: ToolContext): Promise<ToolExecutionResult> {
   const pattern = getString(args, 'pattern', { required: true });
   const basePathInput = getString(args, 'path') || '.';
@@ -221,6 +286,13 @@ async function runSearchFiles(args: Record<string, unknown>, context: ToolContex
   const flags = caseSensitive ? 'g' : 'gi';
   const matcher = useRegex ? new RegExp(pattern, flags) : null;
   const needle = caseSensitive ? pattern : pattern.toLowerCase();
+  const alternates =
+    !useRegex && pattern.includes('|')
+      ? pattern
+          .split('|')
+          .map((part) => (caseSensitive ? part.trim() : part.trim().toLowerCase()))
+          .filter((part) => part.length > 0)
+      : [];
 
   for (const filePath of files) {
     if (fileExtensions.length > 0 && !fileExtensions.includes(path.extname(filePath))) {
@@ -237,7 +309,11 @@ async function runSearchFiles(args: Record<string, unknown>, context: ToolContex
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
       const line = lines[lineIndex];
       const haystack = caseSensitive ? line : line.toLowerCase();
-      const matched = matcher ? matcher.test(line) : haystack.includes(needle);
+      const matched = matcher
+        ? matcher.test(line)
+        : alternates.length > 0
+          ? alternates.some((alternate) => haystack.includes(alternate))
+          : haystack.includes(needle);
 
       if (!matched) {
         if (matcher) {
@@ -402,6 +478,15 @@ export function createTools(): ToolDefinition[] {
       inputShape: '{ "path": "src/index.ts", "startLine": 1, "endLine": 200 }',
       requiresApproval: false,
       run: runReadFile,
+    },
+    {
+      name: 'read_multiple_files',
+      description:
+        'Read several text files in one tool call. Use this after list_files or search_files when you need evidence from multiple files.',
+      inputShape:
+        '{ "paths": ["package.json", "README.md"], "startLine": 1, "maxLinesPerFile": 180, "maxFiles": 6 }',
+      requiresApproval: false,
+      run: runReadMultipleFiles,
     },
     {
       name: 'search_files',

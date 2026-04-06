@@ -6,9 +6,10 @@ Current goals:
 
 - Use local models through `Ollama`
 - Use remote models through any `OpenAI-compatible` chat-completions API
-- Let the model call five core coding tools:
+- Let the model call six core coding tools:
   - `list_files`
   - `read_file`
+  - `read_multiple_files`
   - `search_files`
   - `write_patch`
   - `run_shell`
@@ -104,6 +105,10 @@ npm run dev
 - `Find the main entrypoint of this project and explain the execution flow in Korean.`
 - `Read package.json and README.md, then explain how to run this project.`
 - `Search for all files related to config parsing and summarize them.`
+
+## Recent upgrade
+
+The agent now has `read_multiple_files`, which makes repo analysis prompts more reliable when the answer depends on more than one file.
 
 ## Remote API mode
 

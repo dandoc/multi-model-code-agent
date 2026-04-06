@@ -65,10 +65,52 @@ function isToolName(value: unknown): value is ToolName {
   return (
     value === 'list_files' ||
     value === 'read_file' ||
+    value === 'read_multiple_files' ||
     value === 'search_files' ||
     value === 'write_patch' ||
     value === 'run_shell'
   );
+}
+
+function maybeDecodeQuotedString(value: string): string {
+  const trimmed = value.trim();
+  if (!(trimmed.startsWith('"') && trimmed.endsWith('"'))) {
+    return trimmed;
+  }
+
+  const body = trimmed.slice(1, -1);
+  return body
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t');
+}
+
+function extractJsonishMessage(cleaned: string): string | null {
+  if (!/"type"\s*:\s*"message"/.test(cleaned)) {
+    return null;
+  }
+
+  const keyIndex = cleaned.indexOf('"message"');
+  if (keyIndex === -1) {
+    return null;
+  }
+
+  const colonIndex = cleaned.indexOf(':', keyIndex);
+  if (colonIndex === -1) {
+    return null;
+  }
+
+  let value = cleaned.slice(colonIndex + 1).trim();
+  if (value.endsWith('}')) {
+    value = value.slice(0, -1).trim();
+  }
+  if (value.endsWith(',')) {
+    value = value.slice(0, -1).trim();
+  }
+
+  return maybeDecodeQuotedString(value);
 }
 
 export function parseAgentEnvelope(rawText: string): AgentEnvelope {
@@ -113,7 +155,29 @@ export function parseAgentEnvelope(rawText: string): AgentEnvelope {
         thinking: typeof parsed.thinking === 'string' ? parsed.thinking : undefined,
       };
     }
+
+    if (
+      isToolName(parsed.type) &&
+      parsed.input &&
+      typeof parsed.input === 'object' &&
+      !Array.isArray(parsed.input)
+    ) {
+      return {
+        type: 'tool_call',
+        tool: parsed.type,
+        arguments: parsed.input as Record<string, unknown>,
+        thinking: typeof parsed.thinking === 'string' ? parsed.thinking : undefined,
+      };
+    }
   } catch {
+    const jsonishMessage = extractJsonishMessage(candidate ?? cleaned);
+    if (jsonishMessage !== null) {
+      return {
+        type: 'message',
+        message: jsonishMessage,
+      };
+    }
+
     return {
       type: 'message',
       message: cleaned,
@@ -127,14 +191,22 @@ export function parseAgentEnvelope(rawText: string): AgentEnvelope {
 }
 
 export function formatToolResultForModel(tool: ToolName, result: ToolExecutionResult): string {
-  return [
+  const lines = [
     `TOOL RESULT: ${tool}`,
     `OK: ${result.ok}`,
     `SUMMARY: ${result.summary}`,
     'OUTPUT:',
     result.output,
     result.metadata ? `METADATA: ${JSON.stringify(result.metadata, null, 2)}` : '',
-  ]
+  ];
+
+  if (tool === 'search_files') {
+    lines.push(
+      'GUIDANCE: If the user wants an explanation or summary, inspect the most relevant matching files before giving the final answer.'
+    );
+  }
+
+  return lines
     .filter(Boolean)
     .join('\n');
 }

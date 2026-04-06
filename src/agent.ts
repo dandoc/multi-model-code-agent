@@ -1,7 +1,13 @@
 import { formatToolResultForModel, parseAgentEnvelope } from './jsonProtocol.js';
 import { buildSystemPrompt } from './prompt.js';
 
-import type { AgentConfig, ChatMessage, ModelAdapter, ToolDefinition, ToolExecutionResult } from './types.js';
+import type {
+  AgentConfig,
+  ChatMessage,
+  ModelAdapter,
+  ToolDefinition,
+  ToolExecutionResult,
+} from './types.js';
 
 interface AgentUI {
   confirm: (message: string) => Promise<boolean>;
@@ -44,12 +50,24 @@ export class AgentRunner {
   }
 
   private isStructureQuestion(userInput: string): boolean {
-    return /project structure|directory structure|architecture|entrypoint|entry point|file layout|구조|아키텍처|엔트리포인트|프로젝트 요약/i.test(
+    return /project structure|directory structure|architecture|entrypoint|entry point|file layout|project summary|folder structure|repo structure|structure in korean|구조|아키텍처|엔트리포인트|프로젝트 요약/i.test(
       userInput
     );
   }
 
-  private async executeTool(tool: ToolDefinition, args: Record<string, unknown>): Promise<ToolExecutionResult> {
+  private extractExplicitFilePaths(userInput: string): string[] {
+    const matches =
+      userInput.match(
+        /\b(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:ts|tsx|js|jsx|json|md|yml|yaml|toml|txt|sh|ps1|cjs|mjs)\b/g
+      ) ?? [];
+
+    return [...new Set(matches)];
+  }
+
+  private async executeTool(
+    tool: ToolDefinition,
+    args: Record<string, unknown>
+  ): Promise<ToolExecutionResult> {
     const needsApproval = tool.requiresApproval && !this.config.autoApprove;
 
     if (needsApproval) {
@@ -61,7 +79,8 @@ export class AgentRunner {
         return {
           ok: false,
           summary: `${tool.name} was denied by the user.`,
-          output: 'The user denied this tool call. Choose a safer alternative or explain what you need.',
+          output:
+            'The user denied this tool call. Choose a safer alternative or explain what you need.',
         };
       }
     }
@@ -113,6 +132,35 @@ export class AgentRunner {
     });
   }
 
+  private async maybeBootstrapExplicitFileContext(userInput: string): Promise<void> {
+    const paths = this.extractExplicitFilePaths(userInput);
+    if (paths.length < 2) {
+      return;
+    }
+
+    const readMultipleFilesTool = this.toolMap.get('read_multiple_files');
+    if (!readMultipleFilesTool) {
+      return;
+    }
+
+    this.ui.log('Bootstrapping explicit file context with read_multiple_files...');
+    const result = await this.executeTool(readMultipleFilesTool, {
+      paths,
+      startLine: 1,
+      maxLinesPerFile: 180,
+      maxFiles: 6,
+    });
+
+    this.history.push({
+      role: 'user',
+      content: [
+        'Explicit file bootstrap for the current workspace.',
+        'Use these real file contents instead of guessing.',
+        formatToolResultForModel('read_multiple_files', result),
+      ].join('\n\n'),
+    });
+  }
+
   async runTurn(userInput: string): Promise<string> {
     this.history.push({
       role: 'user',
@@ -120,6 +168,7 @@ export class AgentRunner {
     });
 
     await this.maybeBootstrapStructureContext(userInput);
+    await this.maybeBootstrapExplicitFileContext(userInput);
 
     for (let step = 1; step <= this.config.maxTurns; step += 1) {
       const rawResponse = await this.adapter.complete(this.buildMessages(), this.config);
