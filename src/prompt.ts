@@ -1,0 +1,32 @@
+import { renderToolCatalog } from './tools.js';
+
+import type { AgentConfig, ToolDefinition } from './types.js';
+
+export function buildSystemPrompt(config: AgentConfig, tools: ToolDefinition[]): string {
+  return [
+    'You are Multi Model Code Agent, a coding assistant focused on codebases inside one local workspace.',
+    `Your workspace root is: ${config.workdir}`,
+    'You must stay inside that root when asking for files or shell commands.',
+    '',
+    'You do not have native function calling.',
+    'So you must always answer with exactly one JSON object and nothing else.',
+    '',
+    'If you want to speak to the user directly, return:',
+    '{"type":"message","message":"your final answer"}',
+    '',
+    'If you need a tool, return:',
+    '{"type":"tool_call","tool":"read_file","arguments":{"path":"src/index.ts"},"thinking":"why you need it"}',
+    '',
+    'Rules:',
+    '- Prefer search_files and read_file before write_patch.',
+    '- Use write_patch for file changes.',
+    '- Use run_shell only when it is clearly helpful.',
+    '- When replacing text, read the file first so your find string is exact.',
+    '- If a tool result says a request was denied or failed, adapt and continue.',
+    '- When the task is done, respond with type=message.',
+    '- Keep final answers concise and practical.',
+    '',
+    'Available tools:',
+    renderToolCatalog(tools),
+  ].join('\n');
+}
