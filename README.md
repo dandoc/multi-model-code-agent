@@ -17,6 +17,12 @@ Current goals:
 
 This is an MVP, so the focus is clarity and learnability over raw power.
 
+## Documentation
+
+- `docs/claude-code-inspiration.md` explains what this project borrows conceptually from Claude Code and what it does not copy.
+- `docs/milestones.md` tracks the current roadmap and milestone definitions.
+- `docs/development-log.md` records important project changes, decisions, and known issues.
+
 ## How it works
 
 The agent is made of five pieces:
