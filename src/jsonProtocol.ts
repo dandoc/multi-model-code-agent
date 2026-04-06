@@ -63,6 +63,9 @@ function extractBalancedJson(text: string): string | null {
 
 function isToolName(value: unknown): value is ToolName {
   return (
+    value === 'summarize_project' ||
+    value === 'find_entrypoint' ||
+    value === 'summarize_config' ||
     value === 'list_files' ||
     value === 'read_file' ||
     value === 'read_multiple_files' ||

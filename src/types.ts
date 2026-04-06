@@ -19,6 +19,9 @@ export interface AgentConfig {
 }
 
 export type ToolName =
+  | 'summarize_project'
+  | 'find_entrypoint'
+  | 'summarize_config'
   | 'list_files'
   | 'read_file'
   | 'read_multiple_files'

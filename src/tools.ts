@@ -11,6 +11,7 @@ import {
   shouldIgnoreDirectory,
   walkFiles,
 } from './pathUtils.js';
+import { analyzeConfig, analyzeEntrypoint, analyzeProject } from './repoAnalysis.js';
 
 import type { ToolContext, ToolDefinition, ToolExecutionResult } from './types.js';
 
@@ -69,6 +70,12 @@ function truncate(text: string, maxChars = 12_000): string {
     return text;
   }
   return `${text.slice(0, maxChars)}\n\n[truncated ${text.length - maxChars} chars]`;
+}
+
+function formatSection(title: string, items: string[], emptyMessage: string): string {
+  return [title, ...(items.length > 0 ? items.map((item) => `- ${item}`) : [`- ${emptyMessage}`])].join(
+    '\n'
+  );
 }
 
 function formatLines(content: string, startLine: number, endLine: number): string {
@@ -204,6 +211,114 @@ async function runListFiles(args: Record<string, unknown>, context: ToolContext)
   };
 }
 
+async function runSummarizeProject(
+  _args: Record<string, unknown>,
+  context: ToolContext
+): Promise<ToolExecutionResult> {
+  const report = await analyzeProject(context.config.workdir);
+
+  return {
+    ok: true,
+    summary: `Summarized the project structure for ${report.packageName ?? relativeToRoot(context.config.workdir, context.config.workdir)} using real workspace files.`,
+    output: [
+      report.packageName ? `PACKAGE NAME:\n- ${report.packageName}` : '',
+      formatSection('TOP-LEVEL DIRECTORIES:', report.topLevelDirectories, 'No top-level directories found.'),
+      formatSection('TOP-LEVEL FILES:', report.topLevelFiles, 'No top-level files found.'),
+      formatSection('DETECTED STACK:', report.detectedStack, 'No obvious stack markers found.'),
+      formatSection('KEY FILES:', report.keyFiles, 'No common key files were detected.'),
+      formatSection(
+        'ENTRYPOINT CANDIDATES:',
+        report.entrypointCandidates.map((candidate) => `${candidate.path} (${candidate.reason})`),
+        'No entrypoint candidates were detected.'
+      ),
+      formatSection(
+        'RECOMMENDED NEXT FILES:',
+        report.recommendedNextFiles,
+        'No recommended next files were detected.'
+      ),
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+    metadata: {
+      packageName: report.packageName ?? null,
+      topLevelDirectories: report.topLevelDirectories,
+      topLevelFiles: report.topLevelFiles,
+      detectedStack: report.detectedStack,
+      keyFiles: report.keyFiles,
+      entrypointCandidates: report.entrypointCandidates,
+      recommendedNextFiles: report.recommendedNextFiles,
+    },
+  };
+}
+
+async function runFindEntrypoint(
+  _args: Record<string, unknown>,
+  context: ToolContext
+): Promise<ToolExecutionResult> {
+  const report = await analyzeEntrypoint(context.config.workdir);
+
+  return {
+    ok: true,
+    summary: report.primaryEntrypoint
+      ? `Identified ${report.primaryEntrypoint} as the most likely entrypoint.`
+      : 'Did not find a clear entrypoint candidate.',
+    output: [
+      formatSection(
+        'PRIMARY ENTRYPOINT:',
+        report.primaryEntrypoint ? [report.primaryEntrypoint] : [],
+        'No primary entrypoint was identified.'
+      ),
+      formatSection(
+        'EVIDENCE:',
+        report.evidence,
+        'No package.json or common-path evidence was found.'
+      ),
+      formatSection(
+        'SUPPORTING FILES:',
+        report.supportingFiles,
+        'No local supporting files were resolved from the entrypoint imports.'
+      ),
+      formatSection(
+        'STARTUP FLOW:',
+        report.startupFlow,
+        'No startup flow could be derived.'
+      ),
+    ].join('\n\n'),
+    metadata: {
+      packageName: report.packageName ?? null,
+      primaryEntrypoint: report.primaryEntrypoint,
+      candidatePaths: report.candidatePaths,
+      supportingFiles: report.supportingFiles,
+      startupFlow: report.startupFlow,
+      evidence: report.evidence,
+    },
+  };
+}
+
+async function runSummarizeConfig(
+  _args: Record<string, unknown>,
+  context: ToolContext
+): Promise<ToolExecutionResult> {
+  const report = await analyzeConfig(context.config.workdir);
+
+  return {
+    ok: true,
+    summary: `Summarized configuration sources from ${report.configFiles.length} file${report.configFiles.length === 1 ? '' : 's'}.`,
+    output: [
+      formatSection('CONFIG FILES:', report.configFiles, 'No configuration-related files were detected.'),
+      formatSection('ENV VARIABLES:', report.envVariables, 'No environment variables were detected.'),
+      formatSection('CLI FLAGS:', report.cliFlags, 'No CLI flags were detected.'),
+      formatSection('CONFIG FLOW:', report.configFlow, 'No config flow could be derived.'),
+    ].join('\n\n'),
+    metadata: {
+      configFiles: report.configFiles,
+      envVariables: report.envVariables,
+      cliFlags: report.cliFlags,
+      configFlow: report.configFlow,
+    },
+  };
+}
+
 async function runReadFile(args: Record<string, unknown>, context: ToolContext): Promise<ToolExecutionResult> {
   const requestedPath = getString(args, 'path', { required: true });
   const absolutePath = resolvePathInsideRoot(context.config.workdir, requestedPath);
@@ -237,12 +352,22 @@ async function runReadMultipleFiles(
     20,
     Math.min(400, Math.floor(getNumber(args, 'maxLinesPerFile', 180)))
   );
+  const skipMissing = getBoolean(args, 'skipMissing', false);
   const selectedPaths = requestedPaths.slice(0, maxFiles);
   const chunks: string[] = [];
   const readPaths: string[] = [];
+  const skippedPaths: string[] = [];
 
   for (const requestedPath of selectedPaths) {
     const absolutePath = resolvePathInsideRoot(context.config.workdir, requestedPath);
+    if (!existsSync(absolutePath)) {
+      if (skipMissing) {
+        skippedPaths.push(requestedPath);
+        continue;
+      }
+      throw new Error(`File does not exist: ${requestedPath}`);
+    }
+
     const raw = await readFile(absolutePath, 'utf8');
     const totalLines = raw.split(/\r?\n/).length;
     const endLine = Math.min(totalLines, startLine + maxLinesPerFile - 1);
@@ -256,12 +381,21 @@ async function runReadMultipleFiles(
     );
   }
 
+  if (readPaths.length === 0) {
+    throw new Error(
+      skipMissing
+        ? `None of the requested files exist in the workdir: ${requestedPaths.join(', ')}`
+        : 'No readable files were selected.'
+    );
+  }
+
   return {
     ok: true,
     summary: `Read ${readPaths.length} file${readPaths.length === 1 ? '' : 's'}: ${readPaths.join(', ')}.`,
     output: chunks.join('\n\n'),
     metadata: {
       paths: readPaths,
+      skippedPaths,
       startLine,
       maxLinesPerFile,
       truncatedFileCount:
@@ -464,6 +598,30 @@ async function runShell(args: Record<string, unknown>, context: ToolContext): Pr
 export function createTools(): ToolDefinition[] {
   return [
     {
+      name: 'summarize_project',
+      description:
+        'Generate a deterministic project summary from the real workspace structure and common key files.',
+      inputShape: '{}',
+      requiresApproval: false,
+      run: runSummarizeProject,
+    },
+    {
+      name: 'find_entrypoint',
+      description:
+        'Find the most likely project entrypoint using package.json, common entry files, and local imports.',
+      inputShape: '{}',
+      requiresApproval: false,
+      run: runFindEntrypoint,
+    },
+    {
+      name: 'summarize_config',
+      description:
+        'Summarize configuration files, environment variables, CLI flags, and config flow from the workspace.',
+      inputShape: '{}',
+      requiresApproval: false,
+      run: runSummarizeConfig,
+    },
+    {
       name: 'list_files',
       description:
         'List directories and files as a small tree. Use this first when the user asks about project structure.',
@@ -484,7 +642,7 @@ export function createTools(): ToolDefinition[] {
       description:
         'Read several text files in one tool call. Use this after list_files or search_files when you need evidence from multiple files.',
       inputShape:
-        '{ "paths": ["package.json", "README.md"], "startLine": 1, "maxLinesPerFile": 180, "maxFiles": 6 }',
+        '{ "paths": ["package.json", "README.md"], "startLine": 1, "maxLinesPerFile": 180, "maxFiles": 6, "skipMissing": false }',
       requiresApproval: false,
       run: runReadMultipleFiles,
     },

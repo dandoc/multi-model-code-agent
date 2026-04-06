@@ -74,3 +74,19 @@
 
 - Claude Code와의 관계, 프로젝트 마일스톤, 개발 로그를 문서로 분리
 - 앞으로 방향이 바뀌거나 중요한 기능이 들어가면 문서도 함께 갱신
+
+### 결정론적 프로젝트 분석기 추가
+
+요약:
+
+- `src/repoAnalysis.ts` 추가
+- `summarize_project`, `find_entrypoint`, `summarize_config` 툴 추가
+- 구조, 엔트리포인트, 설정 질문에 대해 먼저 결정론적 분석 결과를 주입하도록 에이전트 보강
+- 한국어 질문 감지와 파일 근거 강제 로직 개선
+- 작은 로컬 모델이 끝까지 근거 기반 답변을 못 만들 때 결정론적 폴백으로 마무리하도록 보강
+
+검증:
+
+- `Summarize this project structure in Korean.`
+- `Find the main entrypoint of this project and explain the execution flow in Korean.`
+- `Search for all files related to config parsing and summarize them.`

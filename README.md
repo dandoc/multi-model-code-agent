@@ -6,7 +6,10 @@ Current goals:
 
 - Use local models through `Ollama`
 - Use remote models through any `OpenAI-compatible` chat-completions API
-- Let the model call six core coding tools:
+- Let the model call nine core coding tools:
+  - `summarize_project`
+  - `find_entrypoint`
+  - `summarize_config`
   - `list_files`
   - `read_file`
   - `read_multiple_files`
@@ -114,7 +117,13 @@ npm run dev
 
 ## Recent upgrade
 
-The agent now has `read_multiple_files`, which makes repo analysis prompts more reliable when the answer depends on more than one file.
+The agent now has deterministic repo-analysis helpers:
+
+- `summarize_project`
+- `find_entrypoint`
+- `summarize_config`
+
+These tools make structure, entrypoint, and config questions more reliable, especially when smaller local models struggle to stay grounded.
 
 ## Remote API mode
 
@@ -137,6 +146,7 @@ Then set `OPENAI_API_KEY` in `.env`, or use `/api-key ...` inside the REPL.
 - `src/index.ts` CLI + REPL
 - `src/config.ts` env and CLI argument parsing
 - `src/modelAdapters.ts` Ollama and OpenAI-compatible clients
+- `src/repoAnalysis.ts` deterministic repo analysis helpers
 - `src/prompt.ts` system prompt and tool contract
 - `src/tools.ts` coding tools
 - `src/agent.ts` tool loop
