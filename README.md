@@ -6,6 +6,7 @@ Current goals:
 
 - Use local models through `Ollama`
 - Use remote models through any `OpenAI-compatible` chat-completions API
+- Use `Codex CLI` through a local ChatGPT login, without managing an API key in this project
 - Let the model call nine core coding tools:
   - `summarize_project`
   - `find_entrypoint`
@@ -88,6 +89,12 @@ Copy-Item .env.example .env
 npm run dev -- --provider ollama --model qwen2.5-coder:7b --workdir D:\your-project
 ```
 
+Or use a locally logged-in `codex` CLI session:
+
+```bash
+npm run dev -- --provider codex --workdir D:\your-project
+```
+
 Or rely on `.env`:
 
 ```bash
@@ -100,7 +107,7 @@ npm run dev
 - `/config`
 - `/tools`
 - `/reset`
-- `/provider ollama|openai` persists to `.env`
+- `/provider ollama|openai|codex` persists to `.env`
 - `/model <name>` persists to `.env`
 - `/base-url <url>` persists to `.env`
 - `/api-key <value>`
@@ -153,6 +160,21 @@ npm run dev -- --provider openai --model your-model-name --base-url https://api.
 
 Then set `OPENAI_API_KEY` in `.env`, or use `/api-key ...` inside the REPL.
 
+## ChatGPT login mode
+
+If you want to use `codex` without managing an API key in this project, install the OpenAI Codex CLI, sign in once, and use the `codex` provider:
+
+```bash
+codex login
+npm run dev -- --provider codex --workdir D:\your-project
+```
+
+Notes:
+
+- `codex login status` should show that you are logged in with ChatGPT
+- `/base-url` and `/api-key` are ignored for the `codex` provider
+- `/model` still works and is passed through to `codex exec -m ...`
+
 ## Safety defaults
 
 - `write_patch` requires approval unless auto-approve is on
@@ -162,10 +184,10 @@ Then set `OPENAI_API_KEY` in `.env`, or use `/api-key ...` inside the REPL.
 
 ## Edit approvals
 
-`write_patch` approvals now show a small preview before you confirm:
+`write_patch` approvals now show a small diff-style preview before you confirm:
 
-- for `replace`, the file path, match count, first match line, and before/after snippets
-- for `create`, the target path, whether overwrite is on, and a short content preview
+- for `replace`, the file path, match count, first match line, and a compact `+/-` diff hunk
+- for `create`, the target path, whether overwrite is on, and a compact added-lines preview
 
 If the user asks to create files inside the current workspace, the agent should use `write_patch` instead of refusing the request.
 
@@ -175,7 +197,7 @@ This is the first step of Milestone 2, which focuses on safer and more understan
 
 - `src/index.ts` CLI + REPL
 - `src/config.ts` env and CLI argument parsing
-- `src/modelAdapters.ts` Ollama and OpenAI-compatible clients
+- `src/modelAdapters.ts` Ollama, OpenAI-compatible, and Codex CLI clients
 - `src/repoAnalysis.ts` deterministic repo analysis helpers
 - `src/prompt.ts` system prompt and tool contract
 - `src/tools.ts` coding tools

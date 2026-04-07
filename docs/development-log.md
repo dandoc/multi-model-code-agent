@@ -257,3 +257,16 @@ Validation:
 
 - reproduced the workspace-local smoke failure with the hybrid `write_patch` envelope
 - `npm run smoke`
+
+### 2026-04-07 - Diff-style edit previews
+
+Summary:
+
+- `write_patch` approvals and results now render compact `+/-` diff previews instead of separate before/after text blocks
+- replace previews show a small context hunk around the first affected location
+- create previews show the added lines directly
+
+Validation:
+
+- `npm run typecheck`
+- manual replace/create preview check

@@ -122,6 +122,7 @@ Current Milestone 2 coverage now also includes workspace-local file creation:
 - the agent retries if the model refuses a safe workspace-local create request
 - the agent also retries if the model claims creation is complete without a real `write_patch` result
 - `npm run smoke` now verifies this path with a temporary workspace
+- `write_patch` approvals now show a compact diff-style preview for create and replace operations
 
 ## Milestone 3 addendum
 

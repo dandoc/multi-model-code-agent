@@ -10,7 +10,7 @@ export type WritePatchPreview =
       overwrite: boolean;
       lineCount: number;
       charCount: number;
-      contentPreview: string;
+      diffPreview: string;
     }
   | {
       operation: 'replace';
@@ -18,8 +18,8 @@ export type WritePatchPreview =
       replaceAll: boolean;
       matches: number;
       firstMatchLine: number | null;
-      beforePreview: string;
-      afterPreview: string;
+      previewNote?: string;
+      diffPreview: string;
     };
 
 function optionalBoolean(args: Record<string, unknown>, key: string, fallback = false): boolean {
@@ -134,16 +134,81 @@ function lineNumberAtIndex(source: string, index: number): number | null {
   return source.slice(0, index).split(/\r?\n/).length;
 }
 
-function truncateLiteral(text: string, maxChars = 280): string {
-  if (text.length <= maxChars) {
-    return text || '(empty)';
+function truncateDiffLines(lines: string[], maxLines = 14): string[] {
+  if (lines.length <= maxLines) {
+    return lines.length > 0 ? lines : ['  (empty)'];
   }
 
-  return `${text.slice(0, maxChars)}\n[truncated ${text.length - maxChars} chars]`;
+  const remaining = lines.length - maxLines;
+  return [...lines.slice(0, maxLines), `... [truncated ${remaining} more lines]`];
 }
 
 function renderLiteralBlock(title: string, content: string): string {
   return [title, content || '(empty)'].join('\n');
+}
+
+function buildCreateDiffPreview(content: string): string {
+  const lines = content.split(/\r?\n/);
+  const diffLines = ['@@ create @@', ...lines.map((line) => `+ ${line}`)];
+  return truncateDiffLines(diffLines).join('\n');
+}
+
+function buildReplaceDiffPreview(
+  original: string,
+  updated: string,
+  firstMatchLine: number | null,
+  lastMatchLine: number | null
+): string {
+  const originalLines = original.split(/\r?\n/);
+  const updatedLines = updated.split(/\r?\n/);
+  const affectedStartLine = firstMatchLine ?? 1;
+  const affectedEndLine = lastMatchLine ?? affectedStartLine;
+  const contextStart = Math.max(1, affectedStartLine - 2);
+  const contextEndOriginal = Math.min(originalLines.length, affectedEndLine + 2);
+  const approxUpdatedEnd = Math.max(
+    contextStart,
+    Math.min(updatedLines.length, contextEndOriginal + (updatedLines.length - originalLines.length))
+  );
+  const beforeChunk = originalLines.slice(contextStart - 1, contextEndOriginal);
+  const afterChunk = updatedLines.slice(contextStart - 1, approxUpdatedEnd);
+
+  let prefix = 0;
+  while (
+    prefix < beforeChunk.length &&
+    prefix < afterChunk.length &&
+    beforeChunk[prefix] === afterChunk[prefix]
+  ) {
+    prefix += 1;
+  }
+
+  let suffix = 0;
+  while (
+    suffix < beforeChunk.length - prefix &&
+    suffix < afterChunk.length - prefix &&
+    beforeChunk[beforeChunk.length - 1 - suffix] === afterChunk[afterChunk.length - 1 - suffix]
+  ) {
+    suffix += 1;
+  }
+
+  const diffLines = [`@@ line ${contextStart} @@`];
+
+  for (const line of beforeChunk.slice(0, prefix)) {
+    diffLines.push(`  ${line}`);
+  }
+
+  for (const line of beforeChunk.slice(prefix, beforeChunk.length - suffix)) {
+    diffLines.push(`- ${line}`);
+  }
+
+  for (const line of afterChunk.slice(prefix, afterChunk.length - suffix)) {
+    diffLines.push(`+ ${line}`);
+  }
+
+  for (const line of beforeChunk.slice(beforeChunk.length - suffix)) {
+    diffLines.push(`  ${line}`);
+  }
+
+  return truncateDiffLines(diffLines).join('\n');
 }
 
 export async function previewWritePatch(
@@ -165,7 +230,7 @@ export async function previewWritePatch(
       overwrite,
       lineCount: content.split(/\r?\n/).length,
       charCount: content.length,
-      contentPreview: truncateLiteral(content),
+      diffPreview: buildCreateDiffPreview(content),
     };
   }
 
@@ -178,7 +243,10 @@ export async function previewWritePatch(
 
     const original = await readFile(absolutePath, 'utf8');
     const matches = countOccurrences(original, find);
-    const firstMatchLine = lineNumberAtIndex(original, original.indexOf(find));
+    const firstMatchIndex = original.indexOf(find);
+    const firstMatchLine = lineNumberAtIndex(original, firstMatchIndex);
+    const lastMatchLine = lineNumberAtIndex(original, firstMatchIndex + Math.max(0, find.length - 1));
+    const updated = original.replace(find, replace);
 
     return {
       operation: 'replace',
@@ -186,8 +254,9 @@ export async function previewWritePatch(
       replaceAll,
       matches,
       firstMatchLine,
-      beforePreview: truncateLiteral(find),
-      afterPreview: truncateLiteral(replace),
+      previewNote:
+        replaceAll && matches > 1 ? `Preview shows the first of ${matches} matched locations.` : undefined,
+      diffPreview: buildReplaceDiffPreview(original, updated, firstMatchLine, lastMatchLine),
     };
   }
 
@@ -204,7 +273,7 @@ export function renderWritePatchPreview(
       `Overwrite: ${preview.overwrite}`,
       `Content lines: ${preview.lineCount}`,
       `Content chars: ${preview.charCount}`,
-      renderLiteralBlock('Content preview:', preview.contentPreview),
+      renderLiteralBlock('Diff preview:', preview.diffPreview),
     ].join('\n');
   }
 
@@ -213,7 +282,9 @@ export function renderWritePatchPreview(
     `Matches: ${preview.matches}`,
     `Replace all: ${preview.replaceAll}`,
     `First match line: ${preview.firstMatchLine ?? 'not found'}`,
-    renderLiteralBlock('Before:', preview.beforePreview),
-    renderLiteralBlock('After:', preview.afterPreview),
-  ].join('\n');
+    preview.previewNote ? `Preview note: ${preview.previewNote}` : '',
+    renderLiteralBlock('Diff preview:', preview.diffPreview),
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
