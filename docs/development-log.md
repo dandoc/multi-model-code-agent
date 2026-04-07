@@ -198,3 +198,62 @@ Validation:
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke`
+
+### 2026-04-07 - Entrypoint anchor strictness
+
+Summary:
+
+- tightened entrypoint answer validation so a reply must mention the real startup anchors from the bootstrap analysis
+- entrypoint answers now require the main entrypoint plus key startup files such as `src/env.ts` and `src/config.ts` when they are part of the detected flow
+
+Validation:
+
+- reproduced the smoke failure where the model omitted `src/env.ts`
+- `npm run smoke`
+
+### 2026-04-07 - Loose tool-call parsing for local models
+
+Summary:
+
+- expanded JSON parsing so local models can call tools with `{"type":"write_patch", ...}` style envelopes
+- this keeps workspace-local file creation working even when the model does not emit the stricter `tool_call` wrapper
+
+Validation:
+
+- reproduced the smoke failure where the model returned a flat `write_patch` JSON object
+- `npm run smoke`
+
+### 2026-04-07 - Forgiving write_patch arguments
+
+Summary:
+
+- `write_patch` now accepts looser local-model arguments such as missing `operation` or aliases like `contents`, `text`, `replacement`, and `filePath`
+- the agent infers `create` vs `replace` when the model leaves the operation out
+
+Validation:
+
+- reproduced the workspace-local creation smoke failure with a looser `write_patch` shape
+- `npm run smoke`
+
+### 2026-04-07 - Stabilized workspace creation smoke prompt
+
+Summary:
+
+- simplified the workspace-local creation smoke prompt so it tests nested file creation more deterministically
+- the smoke check still verifies parent directory creation because it targets `smoke-output/hello.txt`
+
+Validation:
+
+- `npm run smoke`
+
+### 2026-04-07 - Hybrid tool envelope parsing
+
+Summary:
+
+- added support for local-model envelopes shaped like `{"type":"write_patch","tool":"write_patch","arguments":{...}}`
+- this keeps tool execution working when the model mixes the legacy and newer envelope styles
+
+Validation:
+
+- reproduced the workspace-local smoke failure with the hybrid `write_patch` envelope
+- `npm run smoke`

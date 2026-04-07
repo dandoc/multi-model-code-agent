@@ -22,18 +22,89 @@ export type WritePatchPreview =
       afterPreview: string;
     };
 
-function requireString(args: Record<string, unknown>, key: string): string {
-  const value = args[key];
-  if (typeof value === 'string' && value.length > 0) {
-    return value;
-  }
-
-  throw new Error(`Missing required string field: ${key}`);
-}
-
 function optionalBoolean(args: Record<string, unknown>, key: string, fallback = false): boolean {
   const value = args[key];
   return typeof value === 'boolean' ? value : fallback;
+}
+
+function getStringFromAliases(args: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = args[key];
+    if (typeof value === 'string' && value.length > 0) {
+      return value;
+    }
+  }
+
+  return '';
+}
+
+function requireStringFromAliases(args: Record<string, unknown>, keys: string[], label: string): string {
+  const value = getStringFromAliases(args, keys);
+  if (value.length > 0) {
+    return value;
+  }
+
+  throw new Error(`Missing required string field: ${label}`);
+}
+
+function inferOperation(args: Record<string, unknown>): 'create' | 'replace' {
+  const explicit = getStringFromAliases(args, ['operation']).toLowerCase();
+  if (explicit === 'create' || explicit === 'replace') {
+    return explicit;
+  }
+
+  const hasFind = getStringFromAliases(args, ['find', 'search', 'oldText', 'old', 'needle']).length > 0;
+  const hasContent =
+    getStringFromAliases(args, ['content', 'contents', 'text', 'value', 'body']).length > 0;
+
+  if (hasFind) {
+    return 'replace';
+  }
+  if (hasContent) {
+    return 'create';
+  }
+
+  throw new Error('Missing required string field: operation');
+}
+
+export function normalizeWritePatchArgs(args: Record<string, unknown>):
+  | {
+      operation: 'create';
+      path: string;
+      content: string;
+      overwrite: boolean;
+    }
+  | {
+      operation: 'replace';
+      path: string;
+      find: string;
+      replace: string;
+      replaceAll: boolean;
+    } {
+  const operation = inferOperation(args);
+  const path = requireStringFromAliases(args, ['path', 'filePath', 'file', 'target', 'filename'], 'path');
+
+  if (operation === 'create') {
+    return {
+      operation,
+      path,
+      content: requireStringFromAliases(
+        args,
+        ['content', 'contents', 'text', 'value', 'body'],
+        'content'
+      ),
+      overwrite:
+        optionalBoolean(args, 'overwrite', false) || optionalBoolean(args, 'replaceExisting', false),
+    };
+  }
+
+  return {
+    operation,
+    path,
+    find: requireStringFromAliases(args, ['find', 'search', 'oldText', 'old', 'needle'], 'find'),
+    replace: getStringFromAliases(args, ['replace', 'replacement', 'newText', 'with']),
+    replaceAll: optionalBoolean(args, 'replaceAll', false) || optionalBoolean(args, 'all', false),
+  };
 }
 
 function countOccurrences(source: string, target: string): number {
@@ -79,14 +150,14 @@ export async function previewWritePatch(
   rootDir: string,
   args: Record<string, unknown>
 ): Promise<WritePatchPreview> {
-  const operation = requireString(args, 'operation');
-  const requestedPath = requireString(args, 'path');
+  const normalized = normalizeWritePatchArgs(args);
+  const operation = normalized.operation;
+  const requestedPath = normalized.path;
   const absolutePath = resolvePathInsideRoot(rootDir, requestedPath);
   const relativePath = relativeToRoot(rootDir, absolutePath);
 
   if (operation === 'create') {
-    const content = requireString(args, 'content');
-    const overwrite = optionalBoolean(args, 'overwrite', false);
+    const { content, overwrite } = normalized;
 
     return {
       operation: 'create',
@@ -99,9 +170,7 @@ export async function previewWritePatch(
   }
 
   if (operation === 'replace') {
-    const find = requireString(args, 'find');
-    const replace = typeof args.replace === 'string' ? args.replace : '';
-    const replaceAll = optionalBoolean(args, 'replaceAll', false);
+    const { find, replace, replaceAll } = normalized;
 
     if (!existsSync(absolutePath)) {
       throw new Error(`File does not exist: ${requestedPath}`);

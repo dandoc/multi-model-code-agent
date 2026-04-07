@@ -179,10 +179,51 @@ export class AgentRunner {
     return new Set(matches).size;
   }
 
+  private normalizeComparablePath(pathValue: string): string {
+    return pathValue.replace(/\\/g, '/').toLowerCase();
+  }
+
+  private getRequiredEntrypointAnchors(userInput: string): string[] {
+    if (!this.isEntrypointQuestion(userInput)) {
+      return [];
+    }
+
+    const preferred = this.getPreferredBootstrapResult(userInput);
+    if (!preferred || preferred.toolName !== 'find_entrypoint') {
+      return [];
+    }
+
+    const metadata =
+      preferred.result.metadata && typeof preferred.result.metadata === 'object'
+        ? preferred.result.metadata
+        : undefined;
+    const primaryEntrypoint = this.getStringMetadata(metadata, 'primaryEntrypoint');
+    const flowSignals = this.getEntrypointFlowSignals(metadata);
+    const anchors: string[] = [];
+
+    if (primaryEntrypoint) {
+      anchors.push(primaryEntrypoint);
+    }
+    if (flowSignals.loadsDotEnv) {
+      anchors.push('src/env.ts');
+    }
+    if (flowSignals.buildsConfig) {
+      anchors.push('src/config.ts');
+    }
+
+    return [...new Set(anchors.map((value) => this.normalizeComparablePath(value)))];
+  }
+
   private needsMoreGroundedAnswer(userInput: string, text: string): boolean {
     const fileReferenceCount = this.countFileReferences(text);
+    const normalizedText = text.replace(/\\/g, '/').toLowerCase();
 
     if (this.isEntrypointQuestion(userInput)) {
+      const requiredAnchors = this.getRequiredEntrypointAnchors(userInput);
+      if (requiredAnchors.some((anchor) => !normalizedText.includes(anchor))) {
+        return true;
+      }
+
       return fileReferenceCount < 2;
     }
 

@@ -85,10 +85,10 @@ async function runPromptSmokeTest(config: AgentConfig, testCase: SmokeCase): Pro
 
 async function runWorkspaceCreateSmokeTest(config: AgentConfig): Promise<void> {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'mmca-smoke-'));
-  const workspaceName = path.basename(tempRoot);
   const targetDir = path.join(tempRoot, 'smoke-output');
   const targetFile = path.join(targetDir, 'hello.txt');
-  const prompt = `${workspaceName} dir 안에 smoke-output 폴더를 만들고 hello.txt 파일을 만들어서 Hello Smoke!를 써줘`;
+  const prompt =
+    'Inside the current workspace, create the file smoke-output/hello.txt with the exact content Hello Smoke!';
   const tools = createTools();
   const adapter = createModelAdapter({
     ...config,

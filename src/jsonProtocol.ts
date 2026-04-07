@@ -161,6 +161,20 @@ export function parseAgentEnvelope(rawText: string): AgentEnvelope {
 
     if (
       isToolName(parsed.type) &&
+      parsed.arguments &&
+      typeof parsed.arguments === 'object' &&
+      !Array.isArray(parsed.arguments)
+    ) {
+      return {
+        type: 'tool_call',
+        tool: parsed.type,
+        arguments: parsed.arguments as Record<string, unknown>,
+        thinking: typeof parsed.thinking === 'string' ? parsed.thinking : undefined,
+      };
+    }
+
+    if (
+      isToolName(parsed.type) &&
       parsed.input &&
       typeof parsed.input === 'object' &&
       !Array.isArray(parsed.input)
@@ -170,6 +184,16 @@ export function parseAgentEnvelope(rawText: string): AgentEnvelope {
         tool: parsed.type,
         arguments: parsed.input as Record<string, unknown>,
         thinking: typeof parsed.thinking === 'string' ? parsed.thinking : undefined,
+      };
+    }
+
+    if (isToolName(parsed.type)) {
+      const { type, thinking, ...rest } = parsed;
+      return {
+        type: 'tool_call',
+        tool: type,
+        arguments: rest as Record<string, unknown>,
+        thinking: typeof thinking === 'string' ? thinking : undefined,
       };
     }
   } catch {

@@ -12,7 +12,7 @@ import {
   walkFiles,
 } from './pathUtils.js';
 import { analyzeConfig, analyzeEntrypoint, analyzeProject } from './repoAnalysis.js';
-import { previewWritePatch, renderWritePatchPreview } from './writePatchPreview.js';
+import { normalizeWritePatchArgs, previewWritePatch, renderWritePatchPreview } from './writePatchPreview.js';
 
 import type { ToolContext, ToolDefinition, ToolExecutionResult } from './types.js';
 
@@ -489,14 +489,14 @@ async function runSearchFiles(args: Record<string, unknown>, context: ToolContex
 }
 
 async function runWritePatch(args: Record<string, unknown>, context: ToolContext): Promise<ToolExecutionResult> {
-  const operation = getString(args, 'operation', { required: true });
-  const requestedPath = getString(args, 'path', { required: true });
+  const normalized = normalizeWritePatchArgs(args);
+  const operation = normalized.operation;
+  const requestedPath = normalized.path;
   const absolutePath = resolvePathInsideRoot(context.config.workdir, requestedPath);
   const relativePath = relativeToRoot(context.config.workdir, absolutePath);
 
   if (operation === 'create') {
-    const content = getString(args, 'content', { required: true });
-    const overwrite = getBoolean(args, 'overwrite', false);
+    const { content, overwrite } = normalized;
 
     if (existsSync(absolutePath) && !overwrite) {
       throw new Error(`File already exists: ${requestedPath}`);
@@ -525,9 +525,7 @@ async function runWritePatch(args: Record<string, unknown>, context: ToolContext
   }
 
   if (operation === 'replace') {
-    const find = getString(args, 'find', { required: true });
-    const replace = typeof args.replace === 'string' ? args.replace : '';
-    const replaceAll = getBoolean(args, 'replaceAll', false);
+    const { find, replace, replaceAll } = normalized;
     const original = await readFile(absolutePath, 'utf8');
     const matches = countOccurrences(original, find);
 
