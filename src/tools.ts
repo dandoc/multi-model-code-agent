@@ -1,5 +1,5 @@
 import { exec as execCallback } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -276,11 +276,20 @@ async function buildTreeLines(
   includeFiles: boolean,
   includeDirectories: boolean,
   maxEntries: number,
-  lines: string[]
+  lines: string[],
+  visitedDirectories: Set<string>
 ): Promise<void> {
   if (lines.length >= maxEntries) {
     return;
   }
+
+  const canonicalCurrent = realpathSync(currentPath);
+  const normalizedCurrent =
+    process.platform === 'win32' ? canonicalCurrent.toLowerCase() : canonicalCurrent;
+  if (visitedDirectories.has(normalizedCurrent)) {
+    return;
+  }
+  visitedDirectories.add(normalizedCurrent);
 
   const entries = await readdir(currentPath, { withFileTypes: true });
   entries.sort((left, right) => {
@@ -302,7 +311,15 @@ async function buildTreeLines(
       continue;
     }
 
-    const absolutePath = path.join(currentPath, entry.name);
+    const candidatePath = path.join(currentPath, entry.name);
+    let absolutePath: string;
+
+    try {
+      absolutePath = resolvePathInsideRoot(rootDir, candidatePath);
+    } catch {
+      continue;
+    }
+
     const relativePath = relativeToRoot(rootDir, absolutePath);
     const indent = '  '.repeat(depth);
 
@@ -320,7 +337,8 @@ async function buildTreeLines(
           includeFiles,
           includeDirectories,
           maxEntries,
-          lines
+          lines,
+          visitedDirectories
         );
       }
 
@@ -354,7 +372,8 @@ async function runListFiles(args: Record<string, unknown>, context: ToolContext)
     includeFiles,
     includeDirectories,
     maxEntries,
-    lines
+    lines,
+    new Set<string>()
   );
 
   const capped = lines.length >= maxEntries;

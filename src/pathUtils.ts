@@ -1,3 +1,4 @@
+import { existsSync, realpathSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -18,17 +19,51 @@ export function shouldIgnoreDirectory(name: string): boolean {
 }
 
 function normalizeForComparison(input: string): string {
-  return path.resolve(input).toLowerCase();
+  const normalized = path.resolve(input);
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function isPathInsideRoot(rootDir: string, targetPath: string): boolean {
+  const normalizedRoot = normalizeForComparison(rootDir);
+  const normalizedTarget = normalizeForComparison(targetPath);
+  const boundary = `${normalizedRoot}${path.sep}`;
+
+  return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(boundary);
+}
+
+function getNearestExistingPath(targetPath: string): string {
+  let current = path.resolve(targetPath);
+
+  while (!existsSync(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) {
+      throw new Error(`Could not resolve an existing ancestor for path: ${targetPath}`);
+    }
+    current = parent;
+  }
+
+  return current;
+}
+
+function getCanonicalTargetPath(targetPath: string): string {
+  const nearestExistingPath = getNearestExistingPath(targetPath);
+  const nearestExistingRealPath = realpathSync(nearestExistingPath);
+  const missingSuffix = path.relative(nearestExistingPath, targetPath);
+
+  if (!missingSuffix) {
+    return nearestExistingRealPath;
+  }
+
+  return path.resolve(nearestExistingRealPath, missingSuffix);
 }
 
 export function resolvePathInsideRoot(rootDir: string, requestedPath: string): string {
   const root = path.resolve(rootDir);
   const target = path.resolve(root, requestedPath);
-  const normalizedRoot = normalizeForComparison(root);
-  const normalizedTarget = normalizeForComparison(target);
-  const boundary = `${normalizedRoot}${path.sep}`;
+  const canonicalRoot = realpathSync(root);
+  const canonicalTarget = getCanonicalTargetPath(target);
 
-  if (normalizedTarget !== normalizedRoot && !normalizedTarget.startsWith(boundary)) {
+  if (!isPathInsideRoot(canonicalRoot, canonicalTarget)) {
     throw new Error(`Path escapes the configured workdir: ${requestedPath}`);
   }
 
@@ -52,7 +87,8 @@ export function isLikelyBinary(buffer: Buffer): boolean {
 
 export async function walkFiles(rootDir: string): Promise<string[]> {
   const files: string[] = [];
-  const queue: string[] = [rootDir];
+  const queue: string[] = [resolvePathInsideRoot(rootDir, '.')];
+  const visitedDirectories = new Set<string>();
 
   while (queue.length > 0) {
     const current = queue.pop();
@@ -60,9 +96,22 @@ export async function walkFiles(rootDir: string): Promise<string[]> {
       continue;
     }
 
+    const canonicalCurrent = realpathSync(current);
+    if (visitedDirectories.has(normalizeForComparison(canonicalCurrent))) {
+      continue;
+    }
+    visitedDirectories.add(normalizeForComparison(canonicalCurrent));
+
     const entries = await readdir(current, { withFileTypes: true });
     for (const entry of entries) {
-      const absolutePath = path.join(current, entry.name);
+      const candidatePath = path.join(current, entry.name);
+      let absolutePath: string;
+
+      try {
+        absolutePath = resolvePathInsideRoot(rootDir, candidatePath);
+      } catch {
+        continue;
+      }
 
       if (entry.isDirectory()) {
         if (!shouldIgnoreDirectory(entry.name)) {

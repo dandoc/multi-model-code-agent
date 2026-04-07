@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "smoke": "tsx src/smoke.ts",
     "smoke:failures": "tsx src/writePatchFailureSmoke.ts",
-    "smoke:batch": "tsx src/writePatchBatchSmoke.ts"
+    "smoke:batch": "tsx src/writePatchBatchSmoke.ts",
+    "smoke:paths": "tsx src/pathSecuritySmoke.ts"
   },
   "engines": {
     "node": ">=20"

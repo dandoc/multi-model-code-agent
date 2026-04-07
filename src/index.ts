@@ -8,6 +8,7 @@ import {
   providerDefaultBaseUrl,
   providerDefaultModel,
   renderConfigSummary,
+  resolveValidatedWorkdir,
   updateConfig,
 } from './config.js';
 import { loadDotEnv, updateDotEnv } from './env.js';
@@ -361,14 +362,19 @@ async function main(): Promise<void> {
       }
 
       if (entry.startsWith('/workdir ')) {
-        const nextWorkdir = resolve(entry.slice('/workdir '.length).trim());
-        rebuildRuntime(
-          updateConfig(config, {
-            workdir: nextWorkdir,
-          }),
-          true
-        );
-        console.log(`\nWorkdir switched to ${nextWorkdir}. Conversation reset.`);
+        try {
+          const nextWorkdir = resolveValidatedWorkdir(entry.slice('/workdir '.length).trim());
+          rebuildRuntime(
+            updateConfig(config, {
+              workdir: nextWorkdir,
+            }),
+            true
+          );
+          console.log(`\nWorkdir switched to ${nextWorkdir}. Conversation reset.`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.log(`\n${message}`);
+        }
         continue;
       }
 

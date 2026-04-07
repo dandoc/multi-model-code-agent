@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
@@ -89,6 +89,20 @@ function parseArgs(argv: string[]): { flags: Record<string, ArgValue>; prompt?: 
   return { flags, prompt, showHelp };
 }
 
+export function resolveValidatedWorkdir(inputPath: string): string {
+  const workdir = resolve(inputPath);
+
+  if (!existsSync(workdir)) {
+    throw new Error(`Workdir does not exist: ${workdir}`);
+  }
+
+  if (!statSync(workdir).isDirectory()) {
+    throw new Error(`Workdir is not a directory: ${workdir}`);
+  }
+
+  return workdir;
+}
+
 export function createConfigFromInputs(argv: string[]): ParsedCliInput {
   const parsed = parseArgs(argv);
   const providerFlag =
@@ -97,15 +111,11 @@ export function createConfigFromInputs(argv: string[]): ParsedCliInput {
     providerFlag ?? process.env.MODEL_PROVIDER
   );
 
-  const workdir = resolve(
+  const workdir = resolveValidatedWorkdir(
     typeof parsed.flags.workdir === 'string'
       ? parsed.flags.workdir
       : process.env.AGENT_WORKDIR || process.cwd()
   );
-
-  if (!existsSync(workdir)) {
-    throw new Error(`Workdir does not exist: ${workdir}`);
-  }
 
   const modelInput =
     typeof parsed.flags.model === 'string'

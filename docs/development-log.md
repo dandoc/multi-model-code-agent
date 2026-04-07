@@ -297,3 +297,21 @@ Validation:
 - `npm run build`
 - `npm run smoke:failures`
 - `npm run smoke:batch`
+
+### 2026-04-08 - Path boundary hardening
+
+Summary:
+
+- `resolvePathInsideRoot` now compares canonical realpaths instead of only lexical prefixes, which blocks symlink and junction escapes
+- new file paths are checked against the nearest existing parent directory, so creating a file under a linked directory can no longer escape the workspace
+- `walkFiles` and `list_files` now skip out-of-root linked directories and avoid recursive loops through in-root links
+- `/workdir` now reuses the same startup validation path instead of accepting missing or non-directory targets at runtime
+- added `npm run smoke:paths` to cover canonical path checks, traversal safety, and runtime workdir validation
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:paths`
+- `npm run smoke:failures`
+- `npm run smoke:batch`
