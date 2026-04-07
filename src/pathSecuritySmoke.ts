@@ -6,7 +6,7 @@ import { resolveValidatedWorkdir } from './config.js';
 import { resolvePathInsideRoot, walkFiles } from './pathUtils.js';
 import { createTools } from './tools.js';
 
-import type { AgentConfig, ToolContext, ToolDefinition } from './types.js';
+import type { AgentConfig, ToolContext, ToolDefinition, ToolExecutionResult } from './types.js';
 
 function formatElapsed(ms: number): string {
   if (ms < 1_000) {
@@ -19,6 +19,39 @@ function formatElapsed(ms: number): string {
 function assert(condition: boolean, message: string): void {
   if (!condition) {
     throw new Error(message);
+  }
+}
+
+async function expectToolThrow(
+  run: () => Promise<unknown>,
+  expectedSnippet: string,
+  label: string
+): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    assert(
+      message.includes(expectedSnippet),
+      `${label} should include "${expectedSnippet}", got "${message}".`
+    );
+    return;
+  }
+
+  throw new Error(`${label} was expected to fail, but it succeeded.`);
+}
+
+function expectToolFailure(
+  result: ToolExecutionResult,
+  expectedSnippets: string[],
+  label: string
+): void {
+  assert(!result.ok, `${label} was expected to fail, but it succeeded.`);
+  for (const snippet of expectedSnippets) {
+    assert(
+      result.output.includes(snippet) || result.summary.includes(snippet),
+      `${label} should include "${snippet}".\nSummary: ${result.summary}\nOutput:\n${result.output}`
+    );
   }
 }
 
@@ -70,7 +103,10 @@ async function main(): Promise<void> {
     await createDirectoryLink(outside, path.join(root, 'link-out'));
 
     const listFilesTool = getTool('list_files');
+    const readFileTool = getTool('read_file');
+    const readMultipleFilesTool = getTool('read_multiple_files');
     const searchFilesTool = getTool('search_files');
+    const writePatchTool = getTool('write_patch');
     const context = buildContext(root);
 
     console.log('\n[path-smoke] Workdir validation');
@@ -133,6 +169,45 @@ async function main(): Promise<void> {
     assert(searchResult.ok, 'Expected search_files to succeed.');
     assert(searchResult.output === 'No matches found.', 'search_files should not read outside-linked files.');
     console.log('[path-smoke] search_files completed.');
+
+    console.log('\n[path-smoke] read_file tool');
+    await expectToolThrow(
+      () => readFileTool.run({ path: 'link-out/secret.txt' }, context),
+      'Path escapes the configured workdir',
+      'read_file'
+    );
+    console.log('[path-smoke] read_file completed.');
+
+    console.log('\n[path-smoke] read_multiple_files tool');
+    await expectToolThrow(
+      () =>
+        readMultipleFilesTool.run(
+          { paths: ['visible.txt', 'link-out/secret.txt'] },
+          context
+        ),
+      'Path escapes the configured workdir',
+      'read_multiple_files'
+    );
+    console.log('[path-smoke] read_multiple_files completed.');
+
+    console.log('\n[path-smoke] write_patch tool');
+    const writePatchResult = await writePatchTool.run(
+      {
+        operation: 'create',
+        path: 'link-out/new-file.txt',
+        content: 'should fail\n',
+      },
+      context
+    );
+    expectToolFailure(
+      writePatchResult,
+      [
+        'Reason: The requested path points outside the current workdir.',
+        'Requested path: link-out/new-file.txt',
+      ],
+      'write_patch'
+    );
+    console.log('[path-smoke] write_patch completed.');
 
     console.log(`\n[path-smoke] All path security checks passed in ${formatElapsed(Date.now() - startedAt)}.`);
   } finally {
