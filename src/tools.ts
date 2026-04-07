@@ -1,6 +1,6 @@
 import { exec as execCallback } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -12,7 +12,10 @@ import {
   walkFiles,
 } from './pathUtils.js';
 import { analyzeConfig, analyzeEntrypoint, analyzeProject } from './repoAnalysis.js';
-import { normalizeWritePatchArgs, previewWritePatch, renderWritePatchPreview } from './writePatchPreview.js';
+import {
+  planWritePatch,
+  renderWritePatchPreview,
+} from './writePatchPreview.js';
 
 import type { ToolContext, ToolDefinition, ToolExecutionResult } from './types.js';
 
@@ -90,24 +93,6 @@ function formatLines(content: string, startLine: number, endLine: number): strin
     .join('\n');
 }
 
-function countOccurrences(source: string, target: string): number {
-  if (!target) {
-    return 0;
-  }
-
-  let count = 0;
-  let startIndex = 0;
-
-  while (true) {
-    const foundIndex = source.indexOf(target, startIndex);
-    if (foundIndex === -1) {
-      return count;
-    }
-    count += 1;
-    startIndex = foundIndex + target.length;
-  }
-}
-
 function getWritePatchPathHint(args: Record<string, unknown>): string | null {
   const candidates = ['path', 'filePath', 'file', 'target', 'filename'];
 
@@ -124,6 +109,30 @@ function getWritePatchPathHint(args: Record<string, unknown>): string | null {
 function getWritePatchOperationHint(args: Record<string, unknown>): string | null {
   const value = args.operation;
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function normalizeDisplayPath(pathValue: string): string {
+  return pathValue.replace(/\\/g, '/');
+}
+
+function getWritePatchBatchItems(args: Record<string, unknown>): Record<string, unknown>[] {
+  for (const key of ['edits', 'changes', 'operations']) {
+    const value = args[key];
+    if (!Array.isArray(value)) {
+      continue;
+    }
+
+    return value.filter(
+      (item): item is Record<string, unknown> =>
+        typeof item === 'object' && item !== null && !Array.isArray(item)
+    );
+  }
+
+  return [];
+}
+
+function isBatchWritePatchRequest(args: Record<string, unknown>): boolean {
+  return getWritePatchBatchItems(args).length > 0;
 }
 
 function buildWritePatchFailureResult(
@@ -195,6 +204,66 @@ function buildWritePatchFailureResult(
       requestedOperation,
       requestedPath,
       rawError: rawMessage,
+    },
+  };
+}
+
+function buildBatchWritePatchFailureResult(
+  args: Record<string, unknown>,
+  context: ToolContext,
+  error: unknown,
+  details: {
+    totalEdits: number;
+    failedEditIndex?: number;
+    failedEdit?: Record<string, unknown>;
+    validationFailedBeforeWrite?: boolean;
+    failedPath?: string;
+    rollbackRestoredCount?: number;
+    rollbackFailedPaths?: string[];
+  }
+): ToolExecutionResult {
+  const base = buildWritePatchFailureResult(details.failedEdit ?? {}, context, error);
+  const rollbackFailedPaths = details.rollbackFailedPaths ?? [];
+  const rollbackLine = details.validationFailedBeforeWrite
+    ? 'Rollback: No files were written because the batch failed during preflight validation.'
+    : [
+        `Rollback: Restored ${details.rollbackRestoredCount ?? 0} file${
+          details.rollbackRestoredCount === 1 ? '' : 's'
+        }.`,
+        rollbackFailedPaths.length > 0
+          ? `Rollback still failed for ${rollbackFailedPaths.join(', ')}.`
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+  return {
+    ok: false,
+    summary:
+      details.failedEditIndex !== undefined
+        ? `write_patch batch failed at edit ${details.failedEditIndex + 1} of ${details.totalEdits}.`
+        : details.failedPath
+          ? `write_patch batch failed while writing ${normalizeDisplayPath(details.failedPath)}.`
+          : 'write_patch batch failed.',
+    output: [
+      `Batch edits: ${details.totalEdits}`,
+      details.failedEditIndex !== undefined ? `Failed edit: ${details.failedEditIndex + 1}` : '',
+      details.failedPath ? `Failed path: ${normalizeDisplayPath(details.failedPath)}` : '',
+      rollbackLine,
+      '',
+      base.output,
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    metadata: {
+      ...(base.metadata ?? {}),
+      batch: true,
+      totalEdits: details.totalEdits,
+      failedEditIndex: details.failedEditIndex,
+      failedPath: details.failedPath ? normalizeDisplayPath(details.failedPath) : null,
+      validationFailedBeforeWrite: details.validationFailedBeforeWrite ?? false,
+      rollbackRestoredCount: details.rollbackRestoredCount ?? 0,
+      rollbackFailedPaths,
     },
   };
 }
@@ -581,76 +650,130 @@ async function runSearchFiles(args: Record<string, unknown>, context: ToolContex
 
 async function runWritePatch(args: Record<string, unknown>, context: ToolContext): Promise<ToolExecutionResult> {
   try {
-    const normalized = normalizeWritePatchArgs(args);
-    const operation = normalized.operation;
-    const requestedPath = normalized.path;
-    const absolutePath = resolvePathInsideRoot(context.config.workdir, requestedPath);
-    const relativePath = relativeToRoot(context.config.workdir, absolutePath);
+    const plan = await planWritePatch(context.config.workdir, args);
+    const writtenPaths: typeof plan.writes = [];
 
-    if (operation === 'create') {
-      const { content, overwrite } = normalized;
-
-      if (existsSync(absolutePath) && !overwrite) {
-        throw new Error(`File already exists: ${requestedPath}`);
+    try {
+      for (const write of plan.writes) {
+        try {
+          await mkdir(path.dirname(write.absolutePath), { recursive: true });
+          await writeFile(write.absolutePath, write.finalContent, 'utf8');
+          writtenPaths.push(write);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new Error(`${write.path}: ${message}`);
+        }
       }
 
-      await mkdir(path.dirname(absolutePath), { recursive: true });
-      await writeFile(absolutePath, content, 'utf8');
-      const preview = await previewWritePatch(context.config.workdir, {
-        operation,
-        path: requestedPath,
-        content,
-        overwrite,
+      if (plan.edits.length === 1) {
+        const normalized = plan.edits[0];
+        const preview = plan.previews[0];
+        const resultPath = plan.writes[0]?.path ?? normalized.path;
+
+        if (normalized.operation === 'create') {
+          return {
+            ok: true,
+            summary: `${normalized.overwrite ? 'Wrote' : 'Created'} ${resultPath}.`,
+            output: renderWritePatchPreview(preview, 'result'),
+            metadata: {
+              operation: normalized.operation,
+              path: resultPath,
+              overwrite: normalized.overwrite,
+              lineCount: preview.operation === 'create' ? preview.lineCount : undefined,
+            },
+          };
+        }
+
+        return {
+          ok: true,
+          summary: `Updated ${resultPath} with ${preview.operation === 'replace' ? preview.matches : 0} replacement${
+            preview.operation === 'replace' && preview.matches === 1 ? '' : 's'
+          }.`,
+          output: renderWritePatchPreview(preview, 'result'),
+          metadata: {
+            operation: normalized.operation,
+            path: resultPath,
+            matches: preview.operation === 'replace' ? preview.matches : undefined,
+            replaceAll: normalized.replaceAll,
+            firstMatchLine: preview.operation === 'replace' ? preview.firstMatchLine : undefined,
+          },
+        };
+      }
+
+      return {
+        ok: true,
+        summary: `Applied batch write_patch with ${plan.edits.length} edits across ${plan.writes.length} file${
+          plan.writes.length === 1 ? '' : 's'
+        }.`,
+        output: renderWritePatchPreview(
+          {
+            operation: 'batch',
+            editCount: plan.edits.length,
+            fileCount: plan.writes.length,
+            rollbackOnFailure: plan.rollbackOnFailure,
+            changedPaths: plan.writes.map((write) => write.path),
+            previews: plan.previews,
+          },
+          'result'
+        ),
+        metadata: {
+          operation: 'batch',
+          editCount: plan.edits.length,
+          fileCount: plan.writes.length,
+          paths: plan.writes.map((write) => write.path),
+          rollbackOnFailure: plan.rollbackOnFailure,
+        },
+      };
+    } catch (commitError) {
+      const message = commitError instanceof Error ? commitError.message : String(commitError);
+      const failedPathMatch = message.match(/^(.*?): /);
+      const failedPath = failedPathMatch?.[1] ?? null;
+      const rollbackRestoredPaths: string[] = [];
+      const rollbackFailedPaths: string[] = [];
+
+      if (plan.rollbackOnFailure) {
+        for (const write of [...writtenPaths].reverse()) {
+          if (!existsSync(write.absolutePath) && !write.originalExists) {
+            continue;
+          }
+
+          try {
+            if (write.originalExists) {
+              await writeFile(write.absolutePath, write.originalContent ?? '', 'utf8');
+            } else {
+              await rm(write.absolutePath, { force: true });
+            }
+            rollbackRestoredPaths.push(write.path);
+          } catch {
+            rollbackFailedPaths.push(write.path);
+          }
+        }
+      }
+
+      return buildBatchWritePatchFailureResult(args, context, commitError, {
+        totalEdits: plan.edits.length,
+        failedPath: failedPath ?? undefined,
+        rollbackRestoredCount: rollbackRestoredPaths.length,
+        rollbackFailedPaths,
       });
-
-      return {
-        ok: true,
-        summary: `${overwrite ? 'Wrote' : 'Created'} ${relativePath}.`,
-        output: renderWritePatchPreview(preview, 'result'),
-        metadata: {
-          operation,
-          path: relativePath,
-          overwrite,
-          lineCount: preview.operation === 'create' ? preview.lineCount : undefined,
-        },
-      };
     }
-
-    if (operation === 'replace') {
-      const { find, replace, replaceAll } = normalized;
-      const original = await readFile(absolutePath, 'utf8');
-      const matches = countOccurrences(original, find);
-
-      if (matches === 0) {
-        throw new Error(`Could not find the target string in ${requestedPath}`);
-      }
-
-      if (matches > 1 && !replaceAll) {
-        throw new Error(
-          `Found ${matches} matches in ${requestedPath}. Use replaceAll=true or provide a more specific find string.`
-        );
-      }
-
-      const preview = await previewWritePatch(context.config.workdir, args);
-      const updated = replaceAll ? original.split(find).join(replace) : original.replace(find, replace);
-      await writeFile(absolutePath, updated, 'utf8');
-
-      return {
-        ok: true,
-        summary: `Updated ${relativePath} with ${matches} replacement${matches === 1 ? '' : 's'}.`,
-        output: renderWritePatchPreview(preview, 'result'),
-        metadata: {
-          operation,
-          path: relativePath,
-          matches,
-          replaceAll,
-          firstMatchLine: preview.operation === 'replace' ? preview.firstMatchLine : undefined,
-        },
-      };
-    }
-
-    throw new Error(`Unsupported write_patch operation: ${operation}`);
   } catch (error) {
+    if (isBatchWritePatchRequest(args)) {
+      const batchItems = getWritePatchBatchItems(args);
+      const batchError = error as Error & {
+        writePatchBatchEditIndex?: number;
+        writePatchBatchEdit?: Record<string, unknown>;
+        writePatchBatchTotalEdits?: number;
+      };
+
+      return buildBatchWritePatchFailureResult(args, context, error, {
+        totalEdits: batchError.writePatchBatchTotalEdits ?? batchItems.length,
+        failedEditIndex: batchError.writePatchBatchEditIndex,
+        failedEdit: batchError.writePatchBatchEdit,
+        validationFailedBeforeWrite: true,
+      });
+    }
+
     return buildWritePatchFailureResult(args, context, error);
   }
 }
@@ -765,9 +888,10 @@ export function createTools(): ToolDefinition[] {
     },
     {
       name: 'write_patch',
-      description: 'Create a file or replace exact text inside a file.',
+      description:
+        'Create files or replace exact text inside files. Supports batched edits with rollback on failure.',
       inputShape:
-        '{ "operation": "replace", "path": "README.md", "find": "old", "replace": "new", "replaceAll": false } or { "operation": "create", "path": "notes.txt", "content": "hello", "overwrite": false }',
+        '{ "operation": "replace", "path": "README.md", "find": "old", "replace": "new", "replaceAll": false } or { "operation": "create", "path": "notes.txt", "content": "hello", "overwrite": false } or { "edits": [{ "operation": "replace", "path": "README.md", "find": "old", "replace": "new" }, { "operation": "create", "path": "notes.txt", "content": "hello" }], "rollbackOnFailure": true }',
       requiresApproval: true,
       run: runWritePatch,
     },

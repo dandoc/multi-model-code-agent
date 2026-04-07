@@ -281,3 +281,19 @@ Summary:
 Validation:
 
 - manual failure checks for create-on-existing-file and replace-without-exact-match
+
+### 2026-04-07 - Batch write patch with rollback
+
+Summary:
+
+- `write_patch` now accepts an `edits` array so the agent can stage multiple create or replace operations in one approval flow
+- batched edits are validated in memory before disk writes begin, which prevents partial updates when a later edit is invalid
+- if a disk write fails after earlier writes succeeded, the tool rolls those earlier writes back to their original contents
+- added `npm run smoke:batch` to cover batched success, preflight failure with no writes, and commit-time rollback
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:failures`
+- `npm run smoke:batch`
