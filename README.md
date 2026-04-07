@@ -108,6 +108,22 @@ npm run dev
 - `/approve on|off`
 - `/quit`
 
+## Smoke test
+
+Run the smoke test to check the minimum healthy path for the project:
+
+```bash
+npm run smoke
+```
+
+This runs:
+
+- `npm run typecheck`
+- `npm run build`
+- a project-structure prompt check
+- an entrypoint-flow prompt check
+- a config-summary prompt check
+
 ## Good first prompts
 
 - `Summarize this project structure in Korean.`

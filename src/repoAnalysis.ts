@@ -63,6 +63,15 @@ const ENV_FILE_PATTERN = /^([A-Z][A-Z0-9_]+)=/gm;
 const FLAG_PATTERN = /--[a-z][a-z0-9-]*/g;
 const LOCAL_IMPORT_PATTERN =
   /(?:import|export)\s+(?:[^'"]*?\s+from\s+)?['"](\.[^'"]+)['"]/g;
+const UTILITY_SCRIPT_NAMES = new Set([
+  'build',
+  'typecheck',
+  'test',
+  'lint',
+  'smoke',
+  'format',
+  'check',
+]);
 
 async function readTextIfExists(rootDir: string, relativePath: string): Promise<string | null> {
   const absolutePath = resolvePathInsideRoot(rootDir, relativePath);
@@ -229,6 +238,10 @@ export async function findEntrypointCandidates(
 
   if (packageJson?.scripts) {
     for (const [scriptName, command] of Object.entries(packageJson.scripts)) {
+      if (UTILITY_SCRIPT_NAMES.has(scriptName)) {
+        continue;
+      }
+
       const baseScore =
         scriptName === 'dev' ? 120 : scriptName === 'start' ? 115 : scriptName === 'build' ? 90 : 80;
 
