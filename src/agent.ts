@@ -393,6 +393,23 @@ export class AgentRunner {
     return paths.map((pathValue) => `\`${this.normalizeDisplayPath(pathValue)}\``);
   }
 
+  private translateProjectStackLabel(label: string): string {
+    switch (label) {
+      case 'Documentation folder present':
+        return '\uBB38\uC11C \uD3F4\uB354\uAC00 \uC788\uB294';
+      case 'Node.js project via package.json':
+        return 'package.json \uAE30\uBC18 Node.js';
+      case 'TypeScript-style source layout':
+        return 'TypeScript \uC2A4\uD0C0\uC77C \uC18C\uC2A4 \uB808\uC774\uC544\uC6C3';
+      case 'Go project via go.mod':
+        return 'go.mod \uAE30\uBC18 Go';
+      case 'Python project files detected':
+        return 'Python \uD504\uB85C\uC81D\uD2B8 \uD30C\uC77C\uC774 \uAC10\uC9C0\uB41C';
+      default:
+        return label;
+    }
+  }
+
   private joinNaturalKorean(items: string[]): string {
     if (items.length === 0) {
       return '';
@@ -570,6 +587,63 @@ export class AgentRunner {
     return paragraphs.join('\n\n');
   }
 
+  private buildProjectSummaryNarrativeKorean(
+    packageName: string | null,
+    topLevelDirectories: string[],
+    stack: string[],
+    keyFiles: string[],
+    recommendedNextFiles: string[],
+    candidates: Array<{ path: string; reason: string }>
+  ): string {
+    const paragraphs: string[] = [];
+    const translatedStack = stack.map((label) => this.translateProjectStackLabel(label));
+
+    const introParts: string[] = [];
+    if (packageName) {
+      introParts.push(`\`${packageName}\`\uB294 ${
+        translatedStack.length > 0
+          ? `${translatedStack.join(', ')} \uAD6C\uC870\uC758 \uD504\uB85C\uC81D\uD2B8`
+          : '\uD604\uC7AC \uC791\uC5C5 \uC911\uC778 \uD504\uB85C\uC81D\uD2B8'
+      }\uC785\uB2C8\uB2E4.`);
+    } else if (translatedStack.length > 0) {
+      introParts.push(`\uC774 \uD504\uB85C\uC81D\uD2B8\uB294 ${translatedStack.join(', ')} \uAD6C\uC870\uB97C \uAC16\uACE0 \uC788\uC2B5\uB2C8\uB2E4.`);
+    }
+
+    if (topLevelDirectories.length > 0) {
+      introParts.push(
+        `\uC0C1\uC704 \uB514\uB809\uD130\uB9AC\uB294 ${this.formatDisplayPaths(topLevelDirectories).join(', ')} \uC785\uB2C8\uB2E4.`
+      );
+    }
+
+    if (introParts.length > 0) {
+      paragraphs.push(introParts.join(' '));
+    }
+
+    if (keyFiles.length > 0) {
+      paragraphs.push(
+        `\uD575\uC2EC \uD30C\uC77C\uC740 ${this.formatDisplayPaths(keyFiles).join(', ')} \uC785\uB2C8\uB2E4.`
+      );
+    }
+
+    if (candidates.length > 0) {
+      paragraphs.push(
+        `\uC5D4\uD2B8\uB9AC\uD3EC\uC778\uD2B8 \uD6C4\uBCF4\uB294 ${candidates
+          .map((candidate) => `\`${this.normalizeDisplayPath(candidate.path)}\`(${candidate.reason})`)
+          .join(', ')} \uC785\uB2C8\uB2E4.`
+      );
+    }
+
+    if (recommendedNextFiles.length > 0) {
+      paragraphs.push(
+        `\uB2E4\uC74C\uC5D0 \uC6B0\uC120 \uBCF4\uAE30 \uC88B\uC740 \uD30C\uC77C\uC740 ${this.formatDisplayPaths(
+          recommendedNextFiles
+        ).join(', ')} \uC785\uB2C8\uB2E4.`
+      );
+    }
+
+    return paragraphs.join('\n\n');
+  }
+
   private buildEntrypointNarrativeEnglish(
     primaryEntrypoint: string | null,
     supportingFiles: string[],
@@ -657,30 +731,21 @@ export class AgentRunner {
 
     if (preferred.toolName === 'summarize_project') {
       const packageName = this.getStringMetadata(metadata, 'packageName');
+      const topLevelDirectories = this.getStringArrayMetadata(metadata, 'topLevelDirectories');
       const stack = this.getStringArrayMetadata(metadata, 'detectedStack');
       const keyFiles = this.getStringArrayMetadata(metadata, 'keyFiles');
       const recommendedNextFiles = this.getStringArrayMetadata(metadata, 'recommendedNextFiles');
       const candidates = this.getCandidateMetadata(metadata, 'entrypointCandidates');
 
       if (korean) {
-        return [
-          `${packageName ? `\`${packageName}\`` : '\uC774 \uD504\uB85C\uC81D\uD2B8'}\uB294 ${
-            stack.length > 0 ? stack.join(', ') : '\uC18C\uC2A4 \uCF54\uB4DC'
-          } \uAE30\uBC18 \uAD6C\uC870\uC785\uB2C8\uB2E4.`,
-          keyFiles.length > 0
-            ? `\uD575\uC2EC \uD30C\uC77C\uC740 ${this.formatDisplayPaths(keyFiles).join(', ')} \uC785\uB2C8\uB2E4.`
-            : '\uD575\uC2EC \uD30C\uC77C\uC740 \uC544\uC9C1 \uC815\uB9AC\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.',
-          candidates.length > 0
-            ? `\uC5D4\uD2B8\uB9AC\uD3EC\uC778\uD2B8 \uD6C4\uBCF4\uB294 ${candidates
-                .map((candidate) => `\`${this.normalizeDisplayPath(candidate.path)}\`(${candidate.reason})`)
-                .join(', ')} \uC785\uB2C8\uB2E4.`
-            : '\uC5D4\uD2B8\uB9AC\uD3EC\uC778\uD2B8 \uD6C4\uBCF4\uB294 \uC544\uC9C1 \uBA85\uD655\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.',
-          recommendedNextFiles.length > 0
-            ? `\uB2E4\uC74C\uC5D0 \uC77D\uC744 \uD30C\uC77C\uC740 ${this.formatDisplayPaths(recommendedNextFiles).join(', ')} \uC785\uB2C8\uB2E4.`
-            : '',
-        ]
-          .filter(Boolean)
-          .join('\n');
+        return this.buildProjectSummaryNarrativeKorean(
+          packageName,
+          topLevelDirectories,
+          stack,
+          keyFiles,
+          recommendedNextFiles,
+          candidates
+        );
       }
 
       return [

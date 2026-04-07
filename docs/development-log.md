@@ -103,3 +103,14 @@
 검증:
 
 - `Find the main entrypoint of this project and explain the execution flow in Korean.`
+
+### 한국어 구조 요약 표현 개선
+
+요약:
+
+- 구조 요약 fallback에서 영어 스택 라벨이 섞이던 문제를 완화
+- `docs/`, `src/` 같은 상위 디렉터리와 핵심 파일, 엔트리포인트 후보를 더 자연스럽게 한국어 문단으로 정리하도록 보강
+
+검증:
+
+- `이 프로젝트 구조를 한국어로 요약해줘`
