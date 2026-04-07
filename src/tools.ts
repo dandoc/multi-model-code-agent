@@ -165,7 +165,7 @@ function buildWritePatchFailureResult(
     suggestions.push('Read the file first and copy the exact text you want to replace.');
     suggestions.push('If whitespace or punctuation changed, make the `find` string more precise.');
   } else {
-    const multiMatch = rawMessage.match(/Found (\d+) matches in (.+?)\./i);
+    const multiMatch = rawMessage.match(/Found (\d+) matches in (.+?)\. Use replaceAll=true/i);
     if (multiMatch) {
       reason = `The \`find\` string matched ${multiMatch[1]} locations in ${multiMatch[2]}.`;
       suggestions.push('Use `replaceAll=true` if you want to update every match.');
