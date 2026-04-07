@@ -108,6 +108,97 @@ function countOccurrences(source: string, target: string): number {
   }
 }
 
+function getWritePatchPathHint(args: Record<string, unknown>): string | null {
+  const candidates = ['path', 'filePath', 'file', 'target', 'filename'];
+
+  for (const key of candidates) {
+    const value = args[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function getWritePatchOperationHint(args: Record<string, unknown>): string | null {
+  const value = args.operation;
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function buildWritePatchFailureResult(
+  args: Record<string, unknown>,
+  context: ToolContext,
+  error: unknown
+): ToolExecutionResult {
+  const rawMessage = error instanceof Error ? error.message : String(error);
+  const requestedPath = getWritePatchPathHint(args);
+  const requestedOperation = getWritePatchOperationHint(args);
+  const summaryTarget = requestedPath ? ` for ${requestedPath}` : '';
+  const suggestions: string[] = [];
+  let reason = rawMessage;
+
+  if (/Missing required string field: path/i.test(rawMessage)) {
+    reason = 'The edit request did not include a target path.';
+    suggestions.push('Provide a `path` inside the current workdir.');
+  } else if (/Missing required string field: operation/i.test(rawMessage)) {
+    reason = 'The edit request did not clearly specify whether it should create or replace text.';
+    suggestions.push('Set `operation` to `create` or `replace`, or include the required create/replace fields.');
+  } else if (/Missing required string field: content/i.test(rawMessage)) {
+    reason = 'A create edit needs file content.';
+    suggestions.push('Include a non-empty `content` field for create operations.');
+  } else if (/Missing required string field: find/i.test(rawMessage)) {
+    reason = 'A replace edit needs the exact text to find.';
+    suggestions.push('Include the exact `find` string you want to replace.');
+  } else if (/Path escapes the configured workdir:/i.test(rawMessage)) {
+    reason = 'The requested path points outside the current workdir.';
+    suggestions.push(`Use a path inside \`${context.config.workdir}\`.`);
+  } else if (/File already exists:/i.test(rawMessage)) {
+    reason = 'The target file already exists.';
+    suggestions.push('Use `overwrite=true` if replacing the whole file is intentional.');
+    suggestions.push('Otherwise choose a different path.');
+  } else if (/File does not exist:/i.test(rawMessage)) {
+    reason = 'The target file does not exist.';
+    suggestions.push('Check the path for typos, or use a create edit first.');
+  } else if (/Could not find the target string in /i.test(rawMessage)) {
+    reason = 'The exact `find` string was not found in the target file.';
+    suggestions.push('Read the file first and copy the exact text you want to replace.');
+    suggestions.push('If whitespace or punctuation changed, make the `find` string more precise.');
+  } else {
+    const multiMatch = rawMessage.match(/Found (\d+) matches in (.+?)\./i);
+    if (multiMatch) {
+      reason = `The \`find\` string matched ${multiMatch[1]} locations in ${multiMatch[2]}.`;
+      suggestions.push('Use `replaceAll=true` if you want to update every match.');
+      suggestions.push('Otherwise narrow the `find` string so it matches only one location.');
+    }
+  }
+
+  if (suggestions.length === 0) {
+    suggestions.push('Review the requested path and edit arguments, then try again.');
+  }
+
+  return {
+    ok: false,
+    summary: `write_patch failed${summaryTarget}.`,
+    output: [
+      `Reason: ${reason}`,
+      requestedOperation ? `Requested operation: ${requestedOperation}` : '',
+      requestedPath ? `Requested path: ${requestedPath}` : '',
+      `Workdir: ${context.config.workdir}`,
+      'Suggested next steps:',
+      ...suggestions.map((item) => `- ${item}`),
+      rawMessage !== reason ? `Raw error: ${rawMessage}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    metadata: {
+      requestedOperation,
+      requestedPath,
+      rawError: rawMessage,
+    },
+  };
+}
+
 async function buildTreeLines(
   rootDir: string,
   currentPath: string,
@@ -489,75 +580,79 @@ async function runSearchFiles(args: Record<string, unknown>, context: ToolContex
 }
 
 async function runWritePatch(args: Record<string, unknown>, context: ToolContext): Promise<ToolExecutionResult> {
-  const normalized = normalizeWritePatchArgs(args);
-  const operation = normalized.operation;
-  const requestedPath = normalized.path;
-  const absolutePath = resolvePathInsideRoot(context.config.workdir, requestedPath);
-  const relativePath = relativeToRoot(context.config.workdir, absolutePath);
+  try {
+    const normalized = normalizeWritePatchArgs(args);
+    const operation = normalized.operation;
+    const requestedPath = normalized.path;
+    const absolutePath = resolvePathInsideRoot(context.config.workdir, requestedPath);
+    const relativePath = relativeToRoot(context.config.workdir, absolutePath);
 
-  if (operation === 'create') {
-    const { content, overwrite } = normalized;
+    if (operation === 'create') {
+      const { content, overwrite } = normalized;
 
-    if (existsSync(absolutePath) && !overwrite) {
-      throw new Error(`File already exists: ${requestedPath}`);
-    }
+      if (existsSync(absolutePath) && !overwrite) {
+        throw new Error(`File already exists: ${requestedPath}`);
+      }
 
-    await mkdir(path.dirname(absolutePath), { recursive: true });
-    await writeFile(absolutePath, content, 'utf8');
-    const preview = await previewWritePatch(context.config.workdir, {
-      operation,
-      path: requestedPath,
-      content,
-      overwrite,
-    });
-
-    return {
-      ok: true,
-      summary: `${overwrite ? 'Wrote' : 'Created'} ${relativePath}.`,
-      output: renderWritePatchPreview(preview, 'result'),
-      metadata: {
+      await mkdir(path.dirname(absolutePath), { recursive: true });
+      await writeFile(absolutePath, content, 'utf8');
+      const preview = await previewWritePatch(context.config.workdir, {
         operation,
-        path: relativePath,
+        path: requestedPath,
+        content,
         overwrite,
-        lineCount: preview.operation === 'create' ? preview.lineCount : undefined,
-      },
-    };
-  }
+      });
 
-  if (operation === 'replace') {
-    const { find, replace, replaceAll } = normalized;
-    const original = await readFile(absolutePath, 'utf8');
-    const matches = countOccurrences(original, find);
-
-    if (matches === 0) {
-      throw new Error(`Could not find the target string in ${requestedPath}`);
+      return {
+        ok: true,
+        summary: `${overwrite ? 'Wrote' : 'Created'} ${relativePath}.`,
+        output: renderWritePatchPreview(preview, 'result'),
+        metadata: {
+          operation,
+          path: relativePath,
+          overwrite,
+          lineCount: preview.operation === 'create' ? preview.lineCount : undefined,
+        },
+      };
     }
 
-    if (matches > 1 && !replaceAll) {
-      throw new Error(
-        `Found ${matches} matches in ${requestedPath}. Use replaceAll=true or provide a more specific find string.`
-      );
+    if (operation === 'replace') {
+      const { find, replace, replaceAll } = normalized;
+      const original = await readFile(absolutePath, 'utf8');
+      const matches = countOccurrences(original, find);
+
+      if (matches === 0) {
+        throw new Error(`Could not find the target string in ${requestedPath}`);
+      }
+
+      if (matches > 1 && !replaceAll) {
+        throw new Error(
+          `Found ${matches} matches in ${requestedPath}. Use replaceAll=true or provide a more specific find string.`
+        );
+      }
+
+      const preview = await previewWritePatch(context.config.workdir, args);
+      const updated = replaceAll ? original.split(find).join(replace) : original.replace(find, replace);
+      await writeFile(absolutePath, updated, 'utf8');
+
+      return {
+        ok: true,
+        summary: `Updated ${relativePath} with ${matches} replacement${matches === 1 ? '' : 's'}.`,
+        output: renderWritePatchPreview(preview, 'result'),
+        metadata: {
+          operation,
+          path: relativePath,
+          matches,
+          replaceAll,
+          firstMatchLine: preview.operation === 'replace' ? preview.firstMatchLine : undefined,
+        },
+      };
     }
 
-    const preview = await previewWritePatch(context.config.workdir, args);
-    const updated = replaceAll ? original.split(find).join(replace) : original.replace(find, replace);
-    await writeFile(absolutePath, updated, 'utf8');
-
-    return {
-      ok: true,
-      summary: `Updated ${relativePath} with ${matches} replacement${matches === 1 ? '' : 's'}.`,
-      output: renderWritePatchPreview(preview, 'result'),
-      metadata: {
-        operation,
-        path: relativePath,
-        matches,
-        replaceAll,
-        firstMatchLine: preview.operation === 'replace' ? preview.firstMatchLine : undefined,
-      },
-    };
+    throw new Error(`Unsupported write_patch operation: ${operation}`);
+  } catch (error) {
+    return buildWritePatchFailureResult(args, context, error);
   }
-
-  throw new Error(`Unsupported write_patch operation: ${operation}`);
 }
 
 async function runShell(args: Record<string, unknown>, context: ToolContext): Promise<ToolExecutionResult> {

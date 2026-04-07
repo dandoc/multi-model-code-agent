@@ -270,3 +270,14 @@ Validation:
 
 - `npm run typecheck`
 - manual replace/create preview check
+
+### 2026-04-07 - Write patch failure messages
+
+Summary:
+
+- `write_patch` failures now explain the reason, requested path or operation when available, and concrete next steps
+- common cases such as missing fields, outside-workdir paths, missing files, existing files, no exact match, and multi-match replace errors now have tailored guidance
+
+Validation:
+
+- manual failure checks for create-on-existing-file and replace-without-exact-match
