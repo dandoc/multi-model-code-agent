@@ -66,21 +66,34 @@ function optionalBoolean(args: Record<string, unknown>, key: string, fallback = 
   return typeof value === 'boolean' ? value : fallback;
 }
 
-function getStringFromAliases(args: Record<string, unknown>, keys: string[]): string {
+function findStringAlias(
+  args: Record<string, unknown>,
+  keys: string[]
+): { key: string; value: string } | null {
   for (const key of keys) {
     const value = args[key];
-    if (typeof value === 'string' && value.length > 0) {
-      return value;
+    if (typeof value === 'string') {
+      return { key, value };
     }
   }
 
-  return '';
+  return null;
 }
 
-function requireStringFromAliases(args: Record<string, unknown>, keys: string[], label: string): string {
-  const value = getStringFromAliases(args, keys);
-  if (value.length > 0) {
-    return value;
+function getStringFromAliases(args: Record<string, unknown>, keys: string[]): string {
+  const match = findStringAlias(args, keys);
+  return match && match.value.length > 0 ? match.value : '';
+}
+
+function requireStringFromAliases(
+  args: Record<string, unknown>,
+  keys: string[],
+  label: string,
+  options?: { allowEmpty?: boolean }
+): string {
+  const match = findStringAlias(args, keys);
+  if (match && (options?.allowEmpty || match.value.length > 0)) {
+    return match.value;
   }
 
   throw new Error(`Missing required string field: ${label}`);
@@ -113,8 +126,7 @@ function inferOperation(args: Record<string, unknown>): 'create' | 'replace' {
   }
 
   const hasFind = getStringFromAliases(args, ['find', 'search', 'oldText', 'old', 'needle']).length > 0;
-  const hasContent =
-    getStringFromAliases(args, ['content', 'contents', 'text', 'value', 'body']).length > 0;
+  const hasContent = findStringAlias(args, ['content', 'contents', 'text', 'value', 'body']) !== null;
 
   if (hasFind) {
     return 'replace';
@@ -137,7 +149,8 @@ export function normalizeWritePatchArgs(args: Record<string, unknown>): Normaliz
       content: requireStringFromAliases(
         args,
         ['content', 'contents', 'text', 'value', 'body'],
-        'content'
+        'content',
+        { allowEmpty: true }
       ),
       overwrite:
         optionalBoolean(args, 'overwrite', false) || optionalBoolean(args, 'replaceExisting', false),
@@ -229,6 +242,10 @@ function indentBlock(text: string): string {
 }
 
 function buildCreateDiffPreview(content: string): string {
+  if (content.length === 0) {
+    return ['@@ create @@', '+ (empty file)'].join('\n');
+  }
+
   const lines = content.split(/\r?\n/);
   const diffLines = ['@@ create @@', ...lines.map((line) => `+ ${line}`)];
   return truncateDiffLines(diffLines).join('\n');
@@ -297,7 +314,7 @@ function buildCreatePreview(path: string, content: string, overwrite: boolean): 
     operation: 'create',
     path,
     overwrite,
-    lineCount: content.split(/\r?\n/).length,
+    lineCount: content.length === 0 ? 0 : content.split(/\r?\n/).length,
     charCount: content.length,
     diffPreview: buildCreateDiffPreview(content),
   };

@@ -117,6 +117,40 @@ async function runBatchSuccessCase(
   assertEqual(helloContent, 'hello\n', caseName, 'examples/hello.txt');
 }
 
+async function runEmptyCreateCase(
+  tool: ToolDefinition,
+  context: ToolContext,
+  root: string
+): Promise<void> {
+  const caseName = 'Empty file create';
+
+  const result = await tool.run(
+    {
+      operation: 'create',
+      path: 'empty.txt',
+      content: '',
+      overwrite: false,
+    },
+    context
+  );
+
+  console.log(`[batch-smoke] summary: ${result.summary}`);
+  console.log(`[batch-smoke] output:\n${result.output}\n`);
+
+  if (!result.ok) {
+    throw new Error(`${caseName} was expected to succeed, but it failed.`);
+  }
+
+  assertIncludesAll(
+    result.output,
+    ['Created: empty.txt', 'Content chars: 0'],
+    caseName
+  );
+
+  const emptyContent = await readFile(path.join(root, 'empty.txt'), 'utf8');
+  assertEqual(emptyContent, '', caseName, 'empty.txt');
+}
+
 async function runPreflightFailureCase(
   tool: ToolDefinition,
   context: ToolContext,
@@ -231,6 +265,7 @@ async function main(): Promise<void> {
   const context = buildContext(root);
 
   const cases: BatchCase[] = [
+    { name: 'Empty file create', run: runEmptyCreateCase },
     { name: 'Batch success', run: runBatchSuccessCase },
     { name: 'Batch preflight failure', run: runPreflightFailureCase },
     { name: 'Batch commit rollback', run: runCommitRollbackCase },

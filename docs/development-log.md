@@ -316,3 +316,17 @@ Validation:
 - `npm run smoke:paths`
 - `npm run smoke:failures`
 - `npm run smoke:batch`
+
+### 2026-04-08 - Empty file create support
+
+Summary:
+
+- `write_patch` create edits now accept an explicit empty string for `content` instead of treating it like a missing field
+- empty file previews now render as `Content lines: 0`, `Content chars: 0`, with a clearer diff preview marker
+- `npm run smoke:batch` now includes a dedicated empty-file create regression case
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:batch`
