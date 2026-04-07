@@ -56,6 +56,17 @@ interface AgentUI {
   log: (message: string) => void;
 }
 
+type EntrypointFlowSignals = {
+  loadsDotEnv: boolean;
+  buildsConfig: boolean;
+  handlesHelp: boolean;
+  initializationPieces: string[];
+  supportsOneShotPrompt: boolean;
+  entersInteractiveRepl: boolean;
+  routesPlainTextToAgent: boolean;
+  runtimeSettings: string[];
+};
+
 function matchesAnyKeyword(userInput: string, keywords: string[]): boolean {
   const normalized = userInput.toLowerCase();
   return keywords.some((keyword) => normalized.includes(keyword.toLowerCase()));
@@ -273,7 +284,7 @@ export class AgentRunner {
       'find_entrypoint',
       'Bootstrapping entrypoint context with find_entrypoint...',
       'Entrypoint bootstrap for the current workspace.',
-      'Use this deterministic entrypoint analysis to explain how the project starts and runs.'
+      'Use this deterministic entrypoint analysis to explain how the project starts and runs. Prefer a short natural explanation instead of a numbered import list.'
     );
   }
 
@@ -382,6 +393,34 @@ export class AgentRunner {
     return paths.map((pathValue) => `\`${this.normalizeDisplayPath(pathValue)}\``);
   }
 
+  private joinNaturalKorean(items: string[]): string {
+    if (items.length === 0) {
+      return '';
+    }
+    if (items.length === 1) {
+      return items[0];
+    }
+    if (items.length === 2) {
+      return `${items[0]}와 ${items[1]}`;
+    }
+
+    return `${items.slice(0, -1).join(', ')}, ${items[items.length - 1]}`;
+  }
+
+  private joinNaturalEnglish(items: string[]): string {
+    if (items.length === 0) {
+      return '';
+    }
+    if (items.length === 1) {
+      return items[0];
+    }
+    if (items.length === 2) {
+      return `${items[0]} and ${items[1]}`;
+    }
+
+    return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+  }
+
   private translateRuntimeSetting(setting: string): string {
     switch (setting) {
       case 'provider':
@@ -416,63 +455,192 @@ export class AgentRunner {
     }
   }
 
-  private translateStartupFlowStep(step: string): string {
-    const normalizedStep = step.replace(/\\/g, '/');
-    const startMatch = normalizedStep.match(/^Start in (.+)\.$/);
-    if (startMatch) {
-      return `\`${startMatch[1]}\`에서 시작합니다.`;
+  private getEntrypointFlowSignals(
+    metadata: Record<string, unknown> | undefined
+  ): EntrypointFlowSignals {
+    const value = metadata?.flowSignals;
+    if (!value || typeof value !== 'object') {
+      return {
+        loadsDotEnv: false,
+        buildsConfig: false,
+        handlesHelp: false,
+        initializationPieces: [],
+        supportsOneShotPrompt: false,
+        entersInteractiveRepl: false,
+        routesPlainTextToAgent: false,
+        runtimeSettings: [],
+      };
     }
 
-    if (normalizedStep === 'Load `.env` values from the current working directory through `src/env.ts`.') {
-      return '`src/env.ts`를 통해 현재 작업 디렉터리의 `.env` 값을 불러옵니다.';
+    const record = value as Record<string, unknown>;
+    return {
+      loadsDotEnv: record.loadsDotEnv === true,
+      buildsConfig: record.buildsConfig === true,
+      handlesHelp: record.handlesHelp === true,
+      initializationPieces: Array.isArray(record.initializationPieces)
+        ? record.initializationPieces.filter(
+            (item): item is string => typeof item === 'string' && item.length > 0
+          )
+        : [],
+      supportsOneShotPrompt: record.supportsOneShotPrompt === true,
+      entersInteractiveRepl: record.entersInteractiveRepl === true,
+      routesPlainTextToAgent: record.routesPlainTextToAgent === true,
+      runtimeSettings: Array.isArray(record.runtimeSettings)
+        ? record.runtimeSettings.filter(
+            (item): item is string => typeof item === 'string' && item.length > 0
+          )
+        : [],
+    };
+  }
+
+  private buildEntrypointNarrativeKorean(
+    primaryEntrypoint: string | null,
+    supportingFiles: string[],
+    signals: EntrypointFlowSignals,
+    evidence: string[]
+  ): string {
+    const paragraphs: string[] = [];
+
+    const introParts: string[] = [];
+    if (primaryEntrypoint) {
+      introParts.push(`이 프로젝트는 \`${this.normalizeDisplayPath(primaryEntrypoint)}\`에서 시작합니다.`);
+    }
+    if (signals.loadsDotEnv && signals.buildsConfig) {
+      introParts.push(
+        '먼저 `src/env.ts`를 통해 `.env` 값을 불러오고, `src/config.ts`에서 CLI 인자와 환경 변수를 합쳐 현재 실행 설정을 만듭니다.'
+      );
+    } else if (signals.loadsDotEnv) {
+      introParts.push('먼저 `src/env.ts`를 통해 `.env` 값을 불러옵니다.');
+    } else if (signals.buildsConfig) {
+      introParts.push('먼저 `src/config.ts`에서 CLI 인자와 환경 변수를 합쳐 현재 실행 설정을 만듭니다.');
+    }
+    if (signals.handlesHelp) {
+      introParts.push('`--help`가 있으면 시작 도움말만 출력하고 바로 종료합니다.');
+    }
+    if (introParts.length > 0) {
+      paragraphs.push(introParts.join(' '));
     }
 
-    if (
-      normalizedStep ===
-      'Parse CLI arguments and environment defaults through `src/config.ts` to build the initial runtime config.'
-    ) {
-      return '`src/config.ts`에서 CLI 인자와 환경 변수 기본값을 합쳐 초기 실행 설정을 만듭니다.';
+    const setupParts: string[] = [];
+    if (signals.initializationPieces.length > 0) {
+      const translatedPieces = signals.initializationPieces.map((piece) =>
+        this.translateInitializationPiece(piece)
+      );
+      setupParts.push(`그다음 ${this.joinNaturalKorean(translatedPieces)}를 준비합니다.`);
+    }
+    if (signals.supportsOneShotPrompt && signals.entersInteractiveRepl) {
+      setupParts.push(
+        '`--prompt`가 있으면 요청을 한 번 실행하고 종료하고, 없으면 현재 설정을 보여준 뒤 대화형 REPL로 들어갑니다.'
+      );
+    } else if (signals.supportsOneShotPrompt) {
+      setupParts.push('`--prompt`가 있으면 요청을 한 번 실행하고 종료합니다.');
+    } else if (signals.entersInteractiveRepl) {
+      setupParts.push('현재 설정을 보여준 뒤 대화형 REPL로 들어갑니다.');
+    }
+    if (setupParts.length > 0) {
+      paragraphs.push(setupParts.join(' '));
     }
 
-    if (normalizedStep === 'If `--help` is present, print the startup help and exit early.') {
-      return '`--help`가 있으면 시작 도움말을 출력하고 바로 종료합니다.';
+    const interactionParts: string[] = [];
+    if (signals.routesPlainTextToAgent) {
+      interactionParts.push('REPL에 일반 텍스트를 입력하면 에이전트가 그 요청을 처리합니다.');
+    }
+    if (signals.runtimeSettings.length > 0) {
+      const translatedSettings = signals.runtimeSettings.map((setting) =>
+        this.translateRuntimeSetting(setting)
+      );
+      interactionParts.push(
+        `\`/provider\`나 \`/model\` 같은 슬래시 명령으로 ${this.joinNaturalKorean(
+          translatedSettings
+        )}를 바꿀 수 있습니다.`
+      );
+    }
+    if (interactionParts.length > 0) {
+      paragraphs.push(interactionParts.join(' '));
     }
 
-    const initializeMatch = normalizedStep.match(/^Initialize (.+)\.$/);
-    if (initializeMatch) {
-      const translatedPieces = initializeMatch[1]
-        .split(/,\s+and\s+|,\s+| and /)
-        .map((piece) => this.translateInitializationPiece(piece.trim()))
-        .filter(Boolean);
-
-      return `${translatedPieces.join(', ')}를 초기화합니다.`;
+    if (supportingFiles.length > 0) {
+      paragraphs.push(`참고한 파일은 ${this.formatDisplayPaths(supportingFiles).join(', ')} 입니다.`);
     }
 
-    if (normalizedStep === 'If a one-shot `--prompt` is provided, run one agent turn and then exit.') {
-      return '`--prompt`가 있으면 에이전트 턴을 한 번 실행하고 종료합니다.';
+    if (evidence.length > 0) {
+      paragraphs.push(`엔트리포인트 근거는 ${evidence.map((item) => `\`${item}\``).join(', ')} 입니다.`);
     }
 
-    if (normalizedStep === 'Otherwise, print the current config summary and enter the interactive REPL loop.') {
-      return '그렇지 않으면 현재 설정 요약을 출력한 뒤 대화형 REPL 루프로 들어갑니다.';
+    return paragraphs.join('\n\n');
+  }
+
+  private buildEntrypointNarrativeEnglish(
+    primaryEntrypoint: string | null,
+    supportingFiles: string[],
+    signals: EntrypointFlowSignals,
+    evidence: string[]
+  ): string {
+    const paragraphs: string[] = [];
+
+    const introParts: string[] = [];
+    if (primaryEntrypoint) {
+      introParts.push(`This project starts in \`${this.normalizeDisplayPath(primaryEntrypoint)}\`.`);
+    }
+    if (signals.loadsDotEnv && signals.buildsConfig) {
+      introParts.push(
+        'It first loads `.env` values through `src/env.ts`, then combines CLI arguments and environment defaults in `src/config.ts` to build the runtime config.'
+      );
+    } else if (signals.loadsDotEnv) {
+      introParts.push('It first loads `.env` values through `src/env.ts`.');
+    } else if (signals.buildsConfig) {
+      introParts.push('It first builds the runtime config in `src/config.ts`.');
+    }
+    if (signals.handlesHelp) {
+      introParts.push('If `--help` is present, it prints the startup help and exits early.');
+    }
+    if (introParts.length > 0) {
+      paragraphs.push(introParts.join(' '));
     }
 
-    if (normalizedStep === 'Plain text REPL input is treated as a user request and sent to the agent loop.') {
-      return 'REPL에서 일반 텍스트 입력은 사용자 요청으로 간주되어 에이전트 루프로 전달됩니다.';
+    const setupParts: string[] = [];
+    if (signals.initializationPieces.length > 0) {
+      setupParts.push(
+        `It then prepares ${this.joinNaturalEnglish(signals.initializationPieces)}.`
+      );
+    }
+    if (signals.supportsOneShotPrompt && signals.entersInteractiveRepl) {
+      setupParts.push(
+        'If `--prompt` is provided, it runs one agent turn and exits; otherwise it shows the current config summary and enters the interactive REPL.'
+      );
+    } else if (signals.supportsOneShotPrompt) {
+      setupParts.push('If `--prompt` is provided, it runs one agent turn and exits.');
+    } else if (signals.entersInteractiveRepl) {
+      setupParts.push('It then shows the current config summary and enters the interactive REPL.');
+    }
+    if (setupParts.length > 0) {
+      paragraphs.push(setupParts.join(' '));
     }
 
-    const runtimeSettingsMatch = normalizedStep.match(
-      /^Slash commands can update runtime settings such as (.+) without restarting the program\.$/
-    );
-    if (runtimeSettingsMatch) {
-      const translatedSettings = runtimeSettingsMatch[1]
-        .split(/,\s+and\s+|,\s+| and /)
-        .map((setting) => this.translateRuntimeSetting(setting.trim()))
-        .filter(Boolean);
-
-      return `슬래시 명령으로 ${translatedSettings.join(', ')} 같은 실행 설정을 프로그램 재시작 없이 바꿀 수 있습니다.`;
+    const interactionParts: string[] = [];
+    if (signals.routesPlainTextToAgent) {
+      interactionParts.push('Plain REPL input is treated as a user request and sent to the agent.');
+    }
+    if (signals.runtimeSettings.length > 0) {
+      interactionParts.push(
+        `Slash commands can update runtime settings such as ${this.joinNaturalEnglish(
+          signals.runtimeSettings
+        )} without restarting the program.`
+      );
+    }
+    if (interactionParts.length > 0) {
+      paragraphs.push(interactionParts.join(' '));
     }
 
-    return normalizedStep;
+    if (supportingFiles.length > 0) {
+      paragraphs.push(`Supporting files: ${this.formatDisplayPaths(supportingFiles).join(', ')}.`);
+    }
+
+    if (evidence.length > 0) {
+      paragraphs.push(`Entrypoint evidence: ${evidence.map((item) => `\`${item}\``).join(', ')}.`);
+    }
+
+    return paragraphs.join('\n\n');
   }
 
   private buildDeterministicFallback(userInput: string): string | null {
@@ -534,40 +702,24 @@ export class AgentRunner {
     if (preferred.toolName === 'find_entrypoint') {
       const primaryEntrypoint = this.getStringMetadata(metadata, 'primaryEntrypoint');
       const supportingFiles = this.getStringArrayMetadata(metadata, 'supportingFiles');
-      const startupFlow = this.getStringArrayMetadata(metadata, 'startupFlow');
       const evidence = this.getStringArrayMetadata(metadata, 'evidence');
-      const flowStepsKorean = startupFlow.map((step) => this.translateStartupFlowStep(step));
-      const flowStepsEnglish = startupFlow.map((step) => step.replace(/\\/g, '/'));
+      const flowSignals = this.getEntrypointFlowSignals(metadata);
 
       if (korean) {
-        return [
-          primaryEntrypoint
-            ? `\uAC00\uC7A5 \uC720\uB825\uD55C \uC9C4\uC785\uC810\uC740 \`${this.normalizeDisplayPath(primaryEntrypoint)}\` \uC785\uB2C8\uB2E4.`
-            : '\uBA85\uD655\uD55C \uC9C4\uC785\uC810\uC744 \uC544\uC9C1 \uCC3E\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.',
-          evidence.length > 0
-            ? `\uADFC\uAC70\uB294 ${evidence.map((item) => `\`${item}\``).join(', ')} \uC785\uB2C8\uB2E4.`
-            : '',
-          supportingFiles.length > 0
-            ? `\uD568\uAED8 \uBCF4\uBA74 \uC88B\uC740 \uD30C\uC77C\uC740 ${this.formatDisplayPaths(supportingFiles).join(', ')} \uC785\uB2C8\uB2E4.`
-            : '',
-          flowStepsKorean.length > 0
-            ? `\uC2E4\uD589 \uD750\uB984\uC740 ${flowStepsKorean.join(' ')}`
-            : '',
-        ]
-          .filter(Boolean)
-          .join('\n');
+        return this.buildEntrypointNarrativeKorean(
+          primaryEntrypoint,
+          supportingFiles,
+          flowSignals,
+          evidence
+        );
       }
 
-      return [
-        primaryEntrypoint ? `The most likely entrypoint is \`${this.normalizeDisplayPath(primaryEntrypoint)}\`.` : '',
-        evidence.length > 0 ? `Evidence: ${evidence.map((item) => `\`${item}\``).join(', ')}.` : '',
-        supportingFiles.length > 0
-          ? `Supporting files: ${this.formatDisplayPaths(supportingFiles).join(', ')}.`
-          : '',
-        flowStepsEnglish.length > 0 ? `Startup flow: ${flowStepsEnglish.join(' ')}` : '',
-      ]
-        .filter(Boolean)
-        .join('\n');
+      return this.buildEntrypointNarrativeEnglish(
+        primaryEntrypoint,
+        supportingFiles,
+        flowSignals,
+        evidence
+      );
     }
 
     if (preferred.toolName === 'summarize_config') {

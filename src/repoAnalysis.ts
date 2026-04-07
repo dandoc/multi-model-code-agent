@@ -34,7 +34,19 @@ export interface EntrypointReport {
   candidatePaths: Array<{ path: string; reason: string }>;
   supportingFiles: string[];
   startupFlow: string[];
+  flowSignals: EntrypointFlowSignals;
   evidence: string[];
+}
+
+export interface EntrypointFlowSignals {
+  loadsDotEnv: boolean;
+  buildsConfig: boolean;
+  handlesHelp: boolean;
+  initializationPieces: string[];
+  supportsOneShotPrompt: boolean;
+  entersInteractiveRepl: boolean;
+  routesPlainTextToAgent: boolean;
+  runtimeSettings: string[];
 }
 
 export interface ConfigSummaryReport {
@@ -397,24 +409,33 @@ function buildEntrypointFlow(
   entrypointPath: string,
   entrypointSource: string,
   supportingFiles: string[]
-): string[] {
+): { steps: string[]; signals: EntrypointFlowSignals } {
   const steps: string[] = [`Start in ${entrypointPath}.`];
   const supportingSet = new Set(supportingFiles.map((file) => file.replace(/\\/g, '/')));
+  const signals: EntrypointFlowSignals = {
+    loadsDotEnv:
+      hasSourceSnippet(entrypointSource, 'loadDotEnv(') || supportingSet.has('src/env.ts'),
+    buildsConfig:
+      hasSourceSnippet(entrypointSource, 'createConfigFromInputs(') || supportingSet.has('src/config.ts'),
+    handlesHelp: hasSourceSnippet(entrypointSource, 'parsed.showHelp'),
+    initializationPieces: [],
+    supportsOneShotPrompt: hasSourceSnippet(entrypointSource, 'if (parsed.prompt)'),
+    entersInteractiveRepl: hasSourceSnippet(entrypointSource, 'while (true)'),
+    routesPlainTextToAgent: hasSourceSnippet(entrypointSource, "if (!entry.startsWith('/'))"),
+    runtimeSettings: [],
+  };
 
-  if (hasSourceSnippet(entrypointSource, 'loadDotEnv(') || supportingSet.has('src/env.ts')) {
+  if (signals.loadsDotEnv) {
     steps.push('Load `.env` values from the current working directory through `src/env.ts`.');
   }
 
-  if (
-    hasSourceSnippet(entrypointSource, 'createConfigFromInputs(') ||
-    supportingSet.has('src/config.ts')
-  ) {
+  if (signals.buildsConfig) {
     steps.push(
       'Parse CLI arguments and environment defaults through `src/config.ts` to build the initial runtime config.'
     );
   }
 
-  if (hasSourceSnippet(entrypointSource, 'parsed.showHelp')) {
+  if (signals.handlesHelp) {
     steps.push('If `--help` is present, print the startup help and exit early.');
   }
 
@@ -431,20 +452,21 @@ function buildEntrypointFlow(
   if (hasSourceSnippet(entrypointSource, 'new AgentRunner(')) {
     initializedPieces.push('the AgentRunner');
   }
+  signals.initializationPieces = initializedPieces;
 
   if (initializedPieces.length > 0) {
     steps.push(`Initialize ${joinNaturalList(initializedPieces)}.`);
   }
 
-  if (hasSourceSnippet(entrypointSource, 'if (parsed.prompt)')) {
+  if (signals.supportsOneShotPrompt) {
     steps.push('If a one-shot `--prompt` is provided, run one agent turn and then exit.');
   }
 
-  if (hasSourceSnippet(entrypointSource, 'while (true)')) {
+  if (signals.entersInteractiveRepl) {
     steps.push('Otherwise, print the current config summary and enter the interactive REPL loop.');
   }
 
-  if (hasSourceSnippet(entrypointSource, "if (!entry.startsWith('/'))")) {
+  if (signals.routesPlainTextToAgent) {
     steps.push('Plain text REPL input is treated as a user request and sent to the agent loop.');
   }
 
@@ -467,6 +489,7 @@ function buildEntrypointFlow(
   if (hasSourceSnippet(entrypointSource, "if (entry.startsWith('/approve '))")) {
     runtimeSettings.push('approval mode');
   }
+  signals.runtimeSettings = runtimeSettings;
 
   if (runtimeSettings.length > 0) {
     steps.push(
@@ -474,7 +497,10 @@ function buildEntrypointFlow(
     );
   }
 
-  return steps;
+  return {
+    steps,
+    signals,
+  };
 }
 
 export async function analyzeProject(rootDir: string): Promise<ProjectSummaryReport> {
@@ -528,9 +554,11 @@ export async function analyzeEntrypoint(rootDir: string): Promise<EntrypointRepo
   const supportingFiles = primaryEntrypoint
     ? await extractSupportingFiles(rootDir, primaryEntrypoint)
     : [];
-  const startupFlow = primaryEntrypoint && entrypointSource
-    ? buildEntrypointFlow(primaryEntrypoint, entrypointSource, supportingFiles)
-    : ['No obvious entrypoint candidate was found in the current workspace.'];
+  const flowAnalysis =
+    primaryEntrypoint && entrypointSource
+      ? buildEntrypointFlow(primaryEntrypoint, entrypointSource, supportingFiles)
+      : null;
+  const startupFlow = flowAnalysis?.steps ?? ['No obvious entrypoint candidate was found in the current workspace.'];
   const evidence = candidatePaths.length
     ? candidatePaths.slice(0, 5).map((candidate) => `${candidate.path}: ${candidate.reason}`)
     : ['No entrypoint candidate was detected from package.json or common file paths.'];
@@ -541,6 +569,16 @@ export async function analyzeEntrypoint(rootDir: string): Promise<EntrypointRepo
     candidatePaths: candidatePaths.slice(0, 5),
     supportingFiles,
     startupFlow,
+    flowSignals: flowAnalysis?.signals ?? {
+      loadsDotEnv: false,
+      buildsConfig: false,
+      handlesHelp: false,
+      initializationPieces: [],
+      supportsOneShotPrompt: false,
+      entersInteractiveRepl: false,
+      routesPlainTextToAgent: false,
+      runtimeSettings: [],
+    },
     evidence,
   };
 }

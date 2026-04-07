@@ -290,6 +290,7 @@ async function runFindEntrypoint(
       candidatePaths: report.candidatePaths,
       supportingFiles: report.supportingFiles,
       startupFlow: report.startupFlow,
+      flowSignals: report.flowSignals,
       evidence: report.evidence,
     },
   };
