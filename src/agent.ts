@@ -158,6 +158,16 @@ export class AgentRunner {
     return numberedLines.length >= 3;
   }
 
+  private containsRawEnglishSectionLabels(text: string): boolean {
+    return /\b(?:TOP-LEVEL FILES|KEY FILES|ENTRYPOINT CANDIDATES|DETECTED STACK|CONFIG FILES|ENV VARIABLES|CLI FLAGS|CONFIG FLOW)\b/.test(
+      text
+    );
+  }
+
+  private containsAwkwardKoreanPhrase(text: string): boolean {
+    return /빌립니다|빌려/i.test(text);
+  }
+
   private extractExplicitFilePaths(userInput: string): string[] {
     const matches =
       userInput.match(
@@ -244,7 +254,7 @@ export class AgentRunner {
       'summarize_project',
       'Bootstrapping structure context with summarize_project...',
       'Structure bootstrap for the current workspace.',
-      'Use this deterministic project summary instead of guessing.'
+      'Use this deterministic project summary instead of guessing. Prefer natural Korean labels and do not repeat raw headings like TOP-LEVEL FILES or KEY FILES.'
     );
   }
 
@@ -303,7 +313,7 @@ export class AgentRunner {
       'summarize_config',
       'Bootstrapping config context with summarize_config...',
       'Config bootstrap for the current workspace.',
-      'Use this deterministic config summary instead of guessing. Prefer a short natural explanation over a numbered checklist.'
+      'Use this deterministic config summary instead of guessing. Prefer a short natural explanation over a numbered checklist, and avoid awkward phrases like "런타임 설정을 빌립니다".'
     );
   }
 
@@ -416,6 +426,14 @@ export class AgentRunner {
   }
 
   private joinNaturalKorean(items: string[]): string {
+    const pairJoiner = (left: string, right: string): string => {
+      const lastChar = left[left.length - 1];
+      const codePoint = lastChar ? lastChar.charCodeAt(0) : 0;
+      const isHangulSyllable = codePoint >= 0xac00 && codePoint <= 0xd7a3;
+      const hasBatchim = isHangulSyllable ? (codePoint - 0xac00) % 28 !== 0 : false;
+      return `${left}${hasBatchim ? '과' : '와'} ${right}`;
+    };
+
     if (items.length === 0) {
       return '';
     }
@@ -423,7 +441,7 @@ export class AgentRunner {
       return items[0];
     }
     if (items.length === 2) {
-      return `${items[0]}와 ${items[1]}`;
+      return pairJoiner(items[0], items[1]);
     }
 
     return `${items.slice(0, -1).join(', ')}, ${items[items.length - 1]}`;
@@ -1032,6 +1050,62 @@ export class AgentRunner {
               'Rewrite the answer as short natural paragraphs.',
               'Do not use a numbered checklist.',
               'Keep the same concrete file references and real config details.',
+            ].join('\n'),
+          });
+          continue;
+        }
+
+        if (
+          this.isLikelyKorean(userInput) &&
+          this.isStructureQuestion(userInput) &&
+          this.containsRawEnglishSectionLabels(envelope.message)
+        ) {
+          styleRewriteCount += 1;
+          const fallback = this.buildDeterministicFallback(userInput);
+          if (fallback && styleRewriteCount >= 2) {
+            this.ui.log('Model kept using raw English structure labels. Returning deterministic fallback.');
+            this.history.push({
+              role: 'assistant',
+              content: fallback,
+            });
+            return fallback;
+          }
+
+          this.ui.log('Model used raw English structure labels. Asking it to rewrite naturally.');
+          this.history.push({
+            role: 'user',
+            content: [
+              'Rewrite the answer in natural Korean.',
+              'Do not repeat raw headings like TOP-LEVEL FILES, KEY FILES, or ENTRYPOINT CANDIDATES.',
+              'Keep the same real file references and project facts.',
+            ].join('\n'),
+          });
+          continue;
+        }
+
+        if (
+          this.isLikelyKorean(userInput) &&
+          this.isConfigQuestion(userInput) &&
+          this.containsAwkwardKoreanPhrase(envelope.message)
+        ) {
+          styleRewriteCount += 1;
+          const fallback = this.buildDeterministicFallback(userInput);
+          if (fallback && styleRewriteCount >= 2) {
+            this.ui.log('Model kept using awkward Korean config phrasing. Returning deterministic fallback.');
+            this.history.push({
+              role: 'assistant',
+              content: fallback,
+            });
+            return fallback;
+          }
+
+          this.ui.log('Model used awkward Korean config phrasing. Asking it to rewrite naturally.');
+          this.history.push({
+            role: 'user',
+            content: [
+              'Rewrite the answer in natural Korean.',
+              'Avoid awkward phrases like "런타임 설정을 빌립니다".',
+              'Keep the same concrete file references and config details.',
             ].join('\n'),
           });
           continue;
