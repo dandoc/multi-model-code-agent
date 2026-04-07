@@ -153,3 +153,18 @@
 - `이 프로젝트 구조를 한국어로 요약해줘`
 - `이 프로젝트 설정이 어디서 정의되고 어떻게 적용되는지 한국어로 설명해줘`
 - `npm run smoke`
+
+### 마일스톤 2 시작: 수정 미리보기와 승인 메시지 개선
+
+요약:
+
+- `src/writePatchPreview.ts` 추가
+- `write_patch` 승인 전에 create/replace 변경 내용을 미리 보여주는 preview 추가
+- `write_patch` 실행 결과도 단순 성공 메시지 대신 before/after 중심 요약으로 개선
+- `run_shell` 승인 메시지도 작업 디렉터리, timeout, 실제 명령이 보이도록 개선
+
+검증:
+
+- `npm run typecheck`
+- `npm run build`
+- 임시 작업 디렉터리에서 `create`와 `replace` 승인 메시지 및 결과 출력 확인

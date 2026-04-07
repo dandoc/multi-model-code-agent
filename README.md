@@ -157,6 +157,15 @@ Then set `OPENAI_API_KEY` in `.env`, or use `/api-key ...` inside the REPL.
 - `run_shell` requires approval unless auto-approve is on
 - file access is restricted to the chosen `workdir`
 
+## Edit approvals
+
+`write_patch` approvals now show a small preview before you confirm:
+
+- for `replace`, the file path, match count, first match line, and before/after snippets
+- for `create`, the target path, whether overwrite is on, and a short content preview
+
+This is the first step of Milestone 2, which focuses on safer and more understandable edits.
+
 ## Project structure
 
 - `src/index.ts` CLI + REPL

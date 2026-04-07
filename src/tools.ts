@@ -12,6 +12,7 @@ import {
   walkFiles,
 } from './pathUtils.js';
 import { analyzeConfig, analyzeEntrypoint, analyzeProject } from './repoAnalysis.js';
+import { previewWritePatch, renderWritePatchPreview } from './writePatchPreview.js';
 
 import type { ToolContext, ToolDefinition, ToolExecutionResult } from './types.js';
 
@@ -491,6 +492,7 @@ async function runWritePatch(args: Record<string, unknown>, context: ToolContext
   const operation = getString(args, 'operation', { required: true });
   const requestedPath = getString(args, 'path', { required: true });
   const absolutePath = resolvePathInsideRoot(context.config.workdir, requestedPath);
+  const relativePath = relativeToRoot(context.config.workdir, absolutePath);
 
   if (operation === 'create') {
     const content = getString(args, 'content', { required: true });
@@ -502,13 +504,22 @@ async function runWritePatch(args: Record<string, unknown>, context: ToolContext
 
     await mkdir(path.dirname(absolutePath), { recursive: true });
     await writeFile(absolutePath, content, 'utf8');
+    const preview = await previewWritePatch(context.config.workdir, {
+      operation,
+      path: requestedPath,
+      content,
+      overwrite,
+    });
 
     return {
       ok: true,
-      summary: `${overwrite ? 'Wrote' : 'Created'} ${relativeToRoot(context.config.workdir, absolutePath)}.`,
-      output: truncate(content),
+      summary: `${overwrite ? 'Wrote' : 'Created'} ${relativePath}.`,
+      output: renderWritePatchPreview(preview, 'result'),
       metadata: {
         operation,
+        path: relativePath,
+        overwrite,
+        lineCount: preview.operation === 'create' ? preview.lineCount : undefined,
       },
     };
   }
@@ -530,16 +541,20 @@ async function runWritePatch(args: Record<string, unknown>, context: ToolContext
       );
     }
 
+    const preview = await previewWritePatch(context.config.workdir, args);
     const updated = replaceAll ? original.split(find).join(replace) : original.replace(find, replace);
     await writeFile(absolutePath, updated, 'utf8');
 
     return {
       ok: true,
-      summary: `Updated ${relativeToRoot(context.config.workdir, absolutePath)} with ${matches} replacement${matches === 1 ? '' : 's'}.`,
-      output: truncate(replace),
+      summary: `Updated ${relativePath} with ${matches} replacement${matches === 1 ? '' : 's'}.`,
+      output: renderWritePatchPreview(preview, 'result'),
       metadata: {
         operation,
+        path: relativePath,
         matches,
+        replaceAll,
+        firstMatchLine: preview.operation === 'replace' ? preview.firstMatchLine : undefined,
       },
     };
   }

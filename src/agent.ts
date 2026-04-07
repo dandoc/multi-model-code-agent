@@ -1,5 +1,6 @@
 import { formatToolResultForModel, parseAgentEnvelope } from './jsonProtocol.js';
 import { buildSystemPrompt } from './prompt.js';
+import { previewWritePatch, renderWritePatchPreview } from './writePatchPreview.js';
 
 import type {
   AgentConfig,
@@ -184,9 +185,7 @@ export class AgentRunner {
     const needsApproval = tool.requiresApproval && !this.config.autoApprove;
 
     if (needsApproval) {
-      const approved = await this.ui.confirm(
-        `Approve ${tool.name} with arguments ${JSON.stringify(args)}?`
-      );
+      const approved = await this.ui.confirm(await this.buildApprovalMessage(tool, args));
 
       if (!approved) {
         return {
@@ -214,6 +213,34 @@ export class AgentRunner {
         output: message,
       };
     }
+  }
+
+  private async buildApprovalMessage(
+    tool: ToolDefinition,
+    args: Record<string, unknown>
+  ): Promise<string> {
+    if (tool.name === 'write_patch') {
+      try {
+        const preview = await previewWritePatch(this.config.workdir, args);
+        return [renderWritePatchPreview(preview, 'approval'), '', 'Approve this edit?'].join('\n');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return [`Approve write_patch?`, `Preview unavailable: ${message}`].join('\n');
+      }
+    }
+
+    if (tool.name === 'run_shell') {
+      const command = typeof args.command === 'string' ? args.command : '(missing command)';
+      const timeoutMs = typeof args.timeoutMs === 'number' ? args.timeoutMs : 30_000;
+      return [
+        `Approve shell command in ${this.config.workdir}?`,
+        `Timeout: ${timeoutMs}ms`,
+        'Command:',
+        command,
+      ].join('\n');
+    }
+
+    return `Approve ${tool.name} with arguments ${JSON.stringify(args)}?`;
   }
 
   private async bootstrapContext(
