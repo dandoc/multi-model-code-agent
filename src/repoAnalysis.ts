@@ -375,28 +375,103 @@ async function extractSupportingFiles(
   return supportingFiles;
 }
 
-function buildEntrypointFlow(entrypointPath: string, supportingFiles: string[]): string[] {
-  const steps: string[] = [`Start from ${entrypointPath}.`];
-
-  const supportingSet = new Set(supportingFiles);
-  if (supportingSet.has('src/env.ts')) {
-    steps.push('Load environment variables through src/env.ts.');
+function joinNaturalList(items: string[]): string {
+  if (items.length === 0) {
+    return '';
   }
-  if (supportingSet.has('src/config.ts')) {
-    steps.push('Build runtime configuration through src/config.ts.');
+  if (items.length === 1) {
+    return items[0];
   }
-  if (supportingSet.has('src/modelAdapters.ts')) {
-    steps.push('Create the selected model adapter through src/modelAdapters.ts.');
-  }
-  if (supportingSet.has('src/tools.ts')) {
-    steps.push('Register the available coding tools through src/tools.ts.');
-  }
-  if (supportingSet.has('src/agent.ts')) {
-    steps.push('Hand user requests to the agent loop in src/agent.ts.');
+  if (items.length === 2) {
+    return `${items[0]} and ${items[1]}`;
   }
 
-  if (steps.length === 1 && supportingFiles.length > 0) {
-    steps.push(`Follow local imports from ${entrypointPath}: ${supportingFiles.join(', ')}.`);
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+function hasSourceSnippet(source: string, snippet: string): boolean {
+  return source.includes(snippet);
+}
+
+function buildEntrypointFlow(
+  entrypointPath: string,
+  entrypointSource: string,
+  supportingFiles: string[]
+): string[] {
+  const steps: string[] = [`Start in ${entrypointPath}.`];
+  const supportingSet = new Set(supportingFiles.map((file) => file.replace(/\\/g, '/')));
+
+  if (hasSourceSnippet(entrypointSource, 'loadDotEnv(') || supportingSet.has('src/env.ts')) {
+    steps.push('Load `.env` values from the current working directory through `src/env.ts`.');
+  }
+
+  if (
+    hasSourceSnippet(entrypointSource, 'createConfigFromInputs(') ||
+    supportingSet.has('src/config.ts')
+  ) {
+    steps.push(
+      'Parse CLI arguments and environment defaults through `src/config.ts` to build the initial runtime config.'
+    );
+  }
+
+  if (hasSourceSnippet(entrypointSource, 'parsed.showHelp')) {
+    steps.push('If `--help` is present, print the startup help and exit early.');
+  }
+
+  const initializedPieces: string[] = [];
+  if (hasSourceSnippet(entrypointSource, 'createTools()')) {
+    initializedPieces.push('the tool catalog');
+  }
+  if (hasSourceSnippet(entrypointSource, 'createInterface({ input, output })')) {
+    initializedPieces.push('the readline REPL interface');
+  }
+  if (hasSourceSnippet(entrypointSource, 'createModelAdapter(config)')) {
+    initializedPieces.push('the selected model adapter');
+  }
+  if (hasSourceSnippet(entrypointSource, 'new AgentRunner(')) {
+    initializedPieces.push('the AgentRunner');
+  }
+
+  if (initializedPieces.length > 0) {
+    steps.push(`Initialize ${joinNaturalList(initializedPieces)}.`);
+  }
+
+  if (hasSourceSnippet(entrypointSource, 'if (parsed.prompt)')) {
+    steps.push('If a one-shot `--prompt` is provided, run one agent turn and then exit.');
+  }
+
+  if (hasSourceSnippet(entrypointSource, 'while (true)')) {
+    steps.push('Otherwise, print the current config summary and enter the interactive REPL loop.');
+  }
+
+  if (hasSourceSnippet(entrypointSource, "if (!entry.startsWith('/'))")) {
+    steps.push('Plain text REPL input is treated as a user request and sent to the agent loop.');
+  }
+
+  const runtimeSettings: string[] = [];
+  if (hasSourceSnippet(entrypointSource, "if (entry.startsWith('/provider '))")) {
+    runtimeSettings.push('provider');
+  }
+  if (hasSourceSnippet(entrypointSource, "if (entry.startsWith('/model '))")) {
+    runtimeSettings.push('model');
+  }
+  if (hasSourceSnippet(entrypointSource, "if (entry.startsWith('/base-url '))")) {
+    runtimeSettings.push('base URL');
+  }
+  if (hasSourceSnippet(entrypointSource, "if (entry.startsWith('/api-key '))")) {
+    runtimeSettings.push('API key');
+  }
+  if (hasSourceSnippet(entrypointSource, "if (entry.startsWith('/workdir '))")) {
+    runtimeSettings.push('workdir');
+  }
+  if (hasSourceSnippet(entrypointSource, "if (entry.startsWith('/approve '))")) {
+    runtimeSettings.push('approval mode');
+  }
+
+  if (runtimeSettings.length > 0) {
+    steps.push(
+      `Slash commands can update runtime settings such as ${joinNaturalList(runtimeSettings)} without restarting the program.`
+    );
   }
 
   return steps;
@@ -449,11 +524,12 @@ export async function analyzeEntrypoint(rootDir: string): Promise<EntrypointRepo
   const packageJson = await parsePackageJson(rootDir);
   const candidatePaths = await findEntrypointCandidates(rootDir);
   const primaryEntrypoint = candidatePaths[0]?.path ?? null;
+  const entrypointSource = primaryEntrypoint ? await readTextIfExists(rootDir, primaryEntrypoint) : null;
   const supportingFiles = primaryEntrypoint
     ? await extractSupportingFiles(rootDir, primaryEntrypoint)
     : [];
-  const startupFlow = primaryEntrypoint
-    ? buildEntrypointFlow(primaryEntrypoint, supportingFiles)
+  const startupFlow = primaryEntrypoint && entrypointSource
+    ? buildEntrypointFlow(primaryEntrypoint, entrypointSource, supportingFiles)
     : ['No obvious entrypoint candidate was found in the current workspace.'];
   const evidence = candidatePaths.length
     ? candidatePaths.slice(0, 5).map((candidate) => `${candidate.path}: ${candidate.reason}`)

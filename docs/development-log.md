@@ -90,3 +90,15 @@
 - `Summarize this project structure in Korean.`
 - `Find the main entrypoint of this project and explain the execution flow in Korean.`
 - `Search for all files related to config parsing and summarize them.`
+
+### 엔트리포인트 실행 흐름 설명 개선
+
+요약:
+
+- `src/repoAnalysis.ts`의 엔트리포인트 분석이 단순 import 나열이 아니라 실제 시작 단계 중심으로 흐름을 만들도록 개선
+- `src/index.ts`의 `.env` 로드, CLI 파싱, help 처리, REPL 초기화, one-shot prompt 실행, REPL 진입 흐름을 단계별로 설명 가능
+- 결정론적 폴백도 같은 실행 단계 요약을 재사용하도록 맞춤
+
+검증:
+
+- `Find the main entrypoint of this project and explain the execution flow in Korean.`

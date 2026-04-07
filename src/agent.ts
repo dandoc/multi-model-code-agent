@@ -382,6 +382,99 @@ export class AgentRunner {
     return paths.map((pathValue) => `\`${this.normalizeDisplayPath(pathValue)}\``);
   }
 
+  private translateRuntimeSetting(setting: string): string {
+    switch (setting) {
+      case 'provider':
+        return 'provider';
+      case 'model':
+        return 'model';
+      case 'base URL':
+        return 'base URL';
+      case 'API key':
+        return 'API key';
+      case 'workdir':
+        return 'workdir';
+      case 'approval mode':
+        return '승인 모드';
+      default:
+        return setting;
+    }
+  }
+
+  private translateInitializationPiece(piece: string): string {
+    switch (piece) {
+      case 'the tool catalog':
+        return '`createTools()`로 만든 툴 목록';
+      case 'the readline REPL interface':
+        return 'readline 기반 REPL 인터페이스';
+      case 'the selected model adapter':
+        return '선택한 모델 어댑터';
+      case 'the AgentRunner':
+        return '`AgentRunner`';
+      default:
+        return piece;
+    }
+  }
+
+  private translateStartupFlowStep(step: string): string {
+    const normalizedStep = step.replace(/\\/g, '/');
+    const startMatch = normalizedStep.match(/^Start in (.+)\.$/);
+    if (startMatch) {
+      return `\`${startMatch[1]}\`에서 시작합니다.`;
+    }
+
+    if (normalizedStep === 'Load `.env` values from the current working directory through `src/env.ts`.') {
+      return '`src/env.ts`를 통해 현재 작업 디렉터리의 `.env` 값을 불러옵니다.';
+    }
+
+    if (
+      normalizedStep ===
+      'Parse CLI arguments and environment defaults through `src/config.ts` to build the initial runtime config.'
+    ) {
+      return '`src/config.ts`에서 CLI 인자와 환경 변수 기본값을 합쳐 초기 실행 설정을 만듭니다.';
+    }
+
+    if (normalizedStep === 'If `--help` is present, print the startup help and exit early.') {
+      return '`--help`가 있으면 시작 도움말을 출력하고 바로 종료합니다.';
+    }
+
+    const initializeMatch = normalizedStep.match(/^Initialize (.+)\.$/);
+    if (initializeMatch) {
+      const translatedPieces = initializeMatch[1]
+        .split(/,\s+and\s+|,\s+| and /)
+        .map((piece) => this.translateInitializationPiece(piece.trim()))
+        .filter(Boolean);
+
+      return `${translatedPieces.join(', ')}를 초기화합니다.`;
+    }
+
+    if (normalizedStep === 'If a one-shot `--prompt` is provided, run one agent turn and then exit.') {
+      return '`--prompt`가 있으면 에이전트 턴을 한 번 실행하고 종료합니다.';
+    }
+
+    if (normalizedStep === 'Otherwise, print the current config summary and enter the interactive REPL loop.') {
+      return '그렇지 않으면 현재 설정 요약을 출력한 뒤 대화형 REPL 루프로 들어갑니다.';
+    }
+
+    if (normalizedStep === 'Plain text REPL input is treated as a user request and sent to the agent loop.') {
+      return 'REPL에서 일반 텍스트 입력은 사용자 요청으로 간주되어 에이전트 루프로 전달됩니다.';
+    }
+
+    const runtimeSettingsMatch = normalizedStep.match(
+      /^Slash commands can update runtime settings such as (.+) without restarting the program\.$/
+    );
+    if (runtimeSettingsMatch) {
+      const translatedSettings = runtimeSettingsMatch[1]
+        .split(/,\s+and\s+|,\s+| and /)
+        .map((setting) => this.translateRuntimeSetting(setting.trim()))
+        .filter(Boolean);
+
+      return `슬래시 명령으로 ${translatedSettings.join(', ')} 같은 실행 설정을 프로그램 재시작 없이 바꿀 수 있습니다.`;
+    }
+
+    return normalizedStep;
+  }
+
   private buildDeterministicFallback(userInput: string): string | null {
     const preferred = this.getPreferredBootstrapResult(userInput);
     if (!preferred) {
@@ -441,38 +534,10 @@ export class AgentRunner {
     if (preferred.toolName === 'find_entrypoint') {
       const primaryEntrypoint = this.getStringMetadata(metadata, 'primaryEntrypoint');
       const supportingFiles = this.getStringArrayMetadata(metadata, 'supportingFiles');
+      const startupFlow = this.getStringArrayMetadata(metadata, 'startupFlow');
       const evidence = this.getStringArrayMetadata(metadata, 'evidence');
-      const supportingSet = new Set(supportingFiles.map((file) => this.normalizeDisplayPath(file)));
-      const flowStepsKorean = [
-        primaryEntrypoint ? `\`${this.normalizeDisplayPath(primaryEntrypoint)}\`\uC5D0\uC11C \uC2DC\uC791\uD569\uB2C8\uB2E4.` : '',
-        supportingSet.has('src/env.ts')
-          ? '\uADF8 \uB2E4\uC74C `src/env.ts`\uC5D0\uC11C `.env` \uAC12\uC744 \uBD88\uB7EC\uC635\uB2C8\uB2E4.'
-          : '',
-        supportingSet.has('src/config.ts')
-          ? '`src/config.ts`\uC5D0\uC11C CLI \uC785\uB825\uACFC \uD658\uACBD \uBCC0\uC218\uB97C \uD569\uCCD0 \uC2E4\uD589 \uC124\uC815\uC744 \uB9CC\uB4ED\uB2C8\uB2E4.'
-          : '',
-        supportingSet.has('src/modelAdapters.ts')
-          ? '`src/modelAdapters.ts`\uC5D0\uC11C \uC120\uD0DD\uD55C \uBAA8\uB378 \uC5B4\uB311\uD130\uB97C \uC0DD\uC131\uD569\uB2C8\uB2E4.'
-          : '',
-        supportingSet.has('src/tools.ts')
-          ? '`src/tools.ts`\uC5D0\uC11C \uC0AC\uC6A9 \uAC00\uB2A5\uD55C \uD234\uC744 \uB4F1\uB85D\uD569\uB2C8\uB2E4.'
-          : '',
-        supportingSet.has('src/agent.ts')
-          ? '\uB9C8\uC9C0\uB9C9\uC73C\uB85C `src/agent.ts`\uC758 \uC5D0\uC774\uC804\uD2B8 \uB8E8\uD504\uAC00 \uC0AC\uC6A9\uC790 \uC694\uCCAD\uC744 \uCC98\uB9AC\uD569\uB2C8\uB2E4.'
-          : '',
-      ].filter(Boolean);
-      const flowStepsEnglish = [
-        primaryEntrypoint ? `Start from \`${this.normalizeDisplayPath(primaryEntrypoint)}\`.` : '',
-        supportingSet.has('src/env.ts') ? 'Load environment variables in `src/env.ts`.' : '',
-        supportingSet.has('src/config.ts')
-          ? 'Build runtime configuration in `src/config.ts`.'
-          : '',
-        supportingSet.has('src/modelAdapters.ts')
-          ? 'Create the selected model adapter in `src/modelAdapters.ts`.'
-          : '',
-        supportingSet.has('src/tools.ts') ? 'Register the tools in `src/tools.ts`.' : '',
-        supportingSet.has('src/agent.ts') ? 'Hand requests to the agent loop in `src/agent.ts`.' : '',
-      ].filter(Boolean);
+      const flowStepsKorean = startupFlow.map((step) => this.translateStartupFlowStep(step));
+      const flowStepsEnglish = startupFlow.map((step) => step.replace(/\\/g, '/'));
 
       if (korean) {
         return [
