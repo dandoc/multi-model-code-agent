@@ -122,3 +122,10 @@ Current Milestone 2 coverage now also includes workspace-local file creation:
 - the agent retries if the model refuses a safe workspace-local create request
 - the agent also retries if the model claims creation is complete without a real `write_patch` result
 - `npm run smoke` now verifies this path with a temporary workspace
+
+## Milestone 3 addendum
+
+Current usability improvements now include persisted startup model settings:
+
+- `/model`, `/provider`, and `/base-url` update `.env`
+- restart behavior now follows the last saved startup model choice

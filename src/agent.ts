@@ -158,6 +158,10 @@ export class AgentRunner {
   }
 
   private requiresFileAnchoredAnswer(userInput: string): boolean {
+    if (this.isSafeWorkspaceLocalCreationTask(userInput)) {
+      return false;
+    }
+
     return (
       this.isStructureQuestion(userInput) ||
       this.isEntrypointQuestion(userInput) ||

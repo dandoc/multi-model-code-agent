@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 
 import { AgentRunner } from './agent.js';
 import { createConfigFromInputs } from './config.js';
-import { loadDotEnv } from './env.js';
+import { loadDotEnv, updateDotEnv } from './env.js';
 import { createModelAdapter } from './modelAdapters.js';
 import { createTools } from './tools.js';
 
@@ -127,6 +127,31 @@ async function runWorkspaceCreateSmokeTest(config: AgentConfig): Promise<void> {
   }
 }
 
+async function runDotEnvPersistenceSmokeTest(): Promise<void> {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'mmca-env-smoke-'));
+  const envPath = path.join(tempRoot, '.env');
+
+  try {
+    await updateDotEnv(tempRoot, {
+      MODEL_PROVIDER: 'ollama',
+      MODEL_NAME: 'qwen2.5-coder:14b',
+      OLLAMA_BASE_URL: 'http://127.0.0.1:11434',
+    });
+
+    const content = await readFile(envPath, 'utf8');
+    console.log(`\n[smoke] .env persistence`);
+    console.log(`[smoke] .env content:\n${content}`);
+
+    assertIncludesAll(
+      content,
+      ['MODEL_PROVIDER=ollama', 'MODEL_NAME=qwen2.5-coder:14b', 'OLLAMA_BASE_URL=http://127.0.0.1:11434'],
+      '.env persistence'
+    );
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   const npm = getNpmCommand();
   const config = buildSmokeConfig();
@@ -164,6 +189,7 @@ async function main(): Promise<void> {
   }
 
   await runWorkspaceCreateSmokeTest(config);
+  await runDotEnvPersistenceSmokeTest();
 
   console.log('\n[smoke] All smoke checks passed.');
 }

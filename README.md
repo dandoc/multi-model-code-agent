@@ -100,9 +100,9 @@ npm run dev
 - `/config`
 - `/tools`
 - `/reset`
-- `/provider ollama|openai`
-- `/model <name>`
-- `/base-url <url>`
+- `/provider ollama|openai` persists to `.env`
+- `/model <name>` persists to `.env`
+- `/base-url <url>` persists to `.env`
 - `/api-key <value>`
 - `/workdir <path>`
 - `/approve on|off`
@@ -124,6 +124,7 @@ This runs:
 - an entrypoint-flow prompt check
 - a config-summary prompt check
 - a workspace-local file-creation check
+- a `.env` persistence check
 
 ## Good first prompts
 

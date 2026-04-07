@@ -182,3 +182,19 @@ Validation:
 - reproduced the failure with a Korean prompt that asked for a `테스트` folder and several language files
 - confirmed that the agent created real files only after the new correction loop
 - `npm run smoke`
+# Development Log
+
+### 2026-04-07 - Model selection persistence
+
+Summary:
+
+- `/model`, `/provider`, and `/base-url` now persist their startup values to `.env`
+- `/api-key` remains session-only
+- added a smoke check that verifies `.env` updates can be written and read back
+
+Validation:
+
+- changed the REPL model setting and confirmed it was saved to `.env`
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke`

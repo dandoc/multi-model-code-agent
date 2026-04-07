@@ -4,7 +4,7 @@ import { stdin as input, stdout as output } from 'node:process';
 
 import { AgentRunner } from './agent.js';
 import { createConfigFromInputs, providerDefaultBaseUrl, renderConfigSummary, updateConfig } from './config.js';
-import { loadDotEnv } from './env.js';
+import { loadDotEnv, updateDotEnv } from './env.js';
 import { createModelAdapter } from './modelAdapters.js';
 import { createTools, renderToolCatalog } from './tools.js';
 
@@ -43,9 +43,9 @@ function printReplHelp(): void {
       '  /config               Show current config',
       '  /tools                Show tool catalog',
       '  /reset                Clear conversation history',
-      '  /provider <name>      Switch provider: ollama or openai',
-      '  /model <name>         Switch model',
-      '  /base-url <url>       Switch base URL',
+      '  /provider <name>      Switch provider and save it to .env',
+      '  /model <name>         Switch model and save it to .env',
+      '  /base-url <url>       Switch base URL and save it to .env',
       '  /api-key <value>      Set API key for this session',
       '  /workdir <path>       Change workdir',
       '  /approve on|off       Toggle auto approval',
@@ -75,7 +75,8 @@ function ensureProviderReady(config: AgentConfig): void {
 }
 
 async function main(): Promise<void> {
-  loadDotEnv(process.cwd());
+  const launchCwd = process.cwd();
+  loadDotEnv(launchCwd);
 
   const parsed = createConfigFromInputs(process.argv.slice(2));
   if (parsed.showHelp) {
@@ -100,6 +101,17 @@ async function main(): Promise<void> {
   };
 
   const agent = new AgentRunner(config, adapter, tools, ui);
+
+  const persistLaunchSettings = async (updates: Record<string, string>): Promise<boolean> => {
+    try {
+      await updateDotEnv(launchCwd, updates);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`\nWarning: could not save .env settings: ${message}`);
+      return false;
+    }
+  };
 
   const rebuildRuntime = (nextConfig: AgentConfig, resetConversation: boolean): void => {
     config = nextConfig;
@@ -183,29 +195,45 @@ async function main(): Promise<void> {
           }),
           true
         );
-        console.log(`\nProvider switched to ${provider}. Conversation reset.`);
+        const saved = await persistLaunchSettings({
+          MODEL_PROVIDER: provider,
+          [provider === 'openai' ? 'OPENAI_BASE_URL' : 'OLLAMA_BASE_URL']: nextBaseUrl,
+        });
+        console.log(
+          `\nProvider switched to ${provider}. Conversation reset.${saved ? ' Saved to .env.' : ''}`
+        );
         continue;
       }
 
       if (entry.startsWith('/model ')) {
+        const nextModel = entry.slice('/model '.length).trim();
         rebuildRuntime(
           updateConfig(config, {
-            model: entry.slice('/model '.length).trim(),
+            model: nextModel,
           }),
           true
         );
-        console.log(`\nModel switched to ${config.model}. Conversation reset.`);
+        const saved = await persistLaunchSettings({
+          MODEL_NAME: nextModel,
+        });
+        console.log(
+          `\nModel switched to ${config.model}. Conversation reset.${saved ? ' Saved to .env.' : ''}`
+        );
         continue;
       }
 
       if (entry.startsWith('/base-url ')) {
+        const nextBaseUrl = entry.slice('/base-url '.length).trim().replace(/\/+$/, '');
         rebuildRuntime(
           updateConfig(config, {
-            baseUrl: entry.slice('/base-url '.length).trim().replace(/\/+$/, ''),
+            baseUrl: nextBaseUrl,
           }),
           true
         );
-        console.log('\nBase URL updated. Conversation reset.');
+        const saved = await persistLaunchSettings({
+          [config.provider === 'openai' ? 'OPENAI_BASE_URL' : 'OLLAMA_BASE_URL']: nextBaseUrl,
+        });
+        console.log(`\nBase URL updated. Conversation reset.${saved ? ' Saved to .env.' : ''}`);
         continue;
       }
 
