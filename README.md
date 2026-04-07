@@ -109,6 +109,8 @@ npm run dev
 - `/reset`
 - `/provider ollama|openai|codex` persists to `.env`
 - `/model <name>` persists to `.env`
+- `/model default` resets to the provider default
+- `/models [current|all|provider]` shows model choices
 - `/base-url <url>` persists to `.env`
 - `/api-key <value>`
 - `/workdir <path>`
@@ -174,6 +176,35 @@ Notes:
 - `codex login status` should show that you are logged in with ChatGPT
 - `/base-url` and `/api-key` are ignored for the `codex` provider
 - `/model` still works and is passed through to `codex exec -m ...`
+- `/model default` clears the explicit model and goes back to the Codex account default
+
+## Provider-scoped model settings
+
+The project now keeps per-provider model preferences so switching providers does not drag an old model along:
+
+- `OLLAMA_MODEL_NAME`
+- `OPENAI_MODEL_NAME`
+- `CODEX_MODEL_NAME`
+
+`MODEL_NAME` is now treated as a deprecated legacy fallback. New writes clear it, and provider-specific keys are the source of truth.
+
+## Listing models
+
+Inside the REPL you can inspect model choices with:
+
+```text
+/models
+/models all
+/models ollama
+/models openai
+/models codex
+```
+
+Behavior by provider:
+
+- `ollama`: reads your locally installed models from `ollama list`
+- `openai`: fetches a live list from `/models` when `OPENAI_API_KEY` is set
+- `codex`: shows the provider default and explains that Codex CLI does not expose a live account model list
 
 ## Safety defaults
 

@@ -6,6 +6,8 @@ export function buildSystemPrompt(config: AgentConfig, tools: ToolDefinition[]):
   return [
     'You are Multi Model Code Agent, a coding assistant focused on codebases inside one local workspace.',
     `Your workspace root is: ${config.workdir}`,
+    `Your current model provider is: ${config.provider}`,
+    `Your current model setting is: ${config.model || '(provider default)'}`,
     'You must stay inside that root when asking for files or shell commands.',
     '',
     'You do not have native function calling.',

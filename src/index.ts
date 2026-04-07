@@ -3,9 +3,22 @@ import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 
 import { AgentRunner } from './agent.js';
-import { createConfigFromInputs, providerDefaultBaseUrl, renderConfigSummary, updateConfig } from './config.js';
+import {
+  createConfigFromInputs,
+  providerDefaultBaseUrl,
+  providerDefaultModel,
+  renderConfigSummary,
+  updateConfig,
+} from './config.js';
 import { loadDotEnv, updateDotEnv } from './env.js';
 import { createModelAdapter } from './modelAdapters.js';
+import {
+  isModelCompatible,
+  providerBaseUrlEnvKey,
+  providerModelEnvKey,
+  renderModelCatalogs,
+  resolveStoredModelForProvider,
+} from './providerModels.js';
 import { createTools, renderToolCatalog } from './tools.js';
 
 import type { AgentConfig, ModelProvider } from './types.js';
@@ -18,9 +31,10 @@ function printStartupHelp(): void {
       'Usage:',
       '  npm run dev -- --provider ollama --model qwen2.5-coder:7b --workdir D:\\project',
       '  npm run dev -- --provider openai --model your-model --base-url https://api.example/v1',
+      '  npm run dev -- --provider codex --workdir D:\\project',
       '',
       'Options:',
-      '  --provider <ollama|openai>',
+      '  --provider <ollama|openai|codex>',
       '  --model <name>',
       '  --base-url <url>',
       '  --api-key <value>',
@@ -43,8 +57,10 @@ function printReplHelp(): void {
       '  /config               Show current config',
       '  /tools                Show tool catalog',
       '  /reset                Clear conversation history',
-      '  /provider <name>      Switch provider and save it to .env',
+      '  /provider <name>      Switch provider (ollama, openai, codex) and save it to .env',
       '  /model <name>         Switch model and save it to .env',
+      '  /model default        Reset model to the provider default',
+      '  /models [scope]       Show models for current, all, or one provider',
       '  /base-url <url>       Switch base URL and save it to .env',
       '  /api-key <value>      Set API key for this session',
       '  /workdir <path>       Change workdir',
@@ -63,13 +79,53 @@ function normalizeProvider(inputValue: string): ModelProvider | null {
   if (value === 'openai' || value === 'openai-compatible') {
     return 'openai';
   }
+  if (value === 'codex') {
+    return 'codex';
+  }
   return null;
+}
+
+function answerRuntimeConfigQuestion(inputValue: string, config: AgentConfig): string | null {
+  const normalized = inputValue.trim().toLowerCase();
+  const asksAboutModel =
+    normalized.includes('current model') ||
+    normalized.includes('what model') ||
+    normalized.includes('which model') ||
+    inputValue.includes('현재') && inputValue.includes('모델') ||
+    inputValue.includes('너의 모델');
+  const asksAboutProvider =
+    normalized.includes('current provider') ||
+    normalized.includes('which provider') ||
+    inputValue.includes('현재') && (inputValue.includes('provider') || inputValue.includes('프로바이더')) ||
+    inputValue.includes('너의 프로바이더');
+  const asksAboutConfig =
+    normalized === 'config' ||
+    normalized === 'current config' ||
+    inputValue.includes('현재 설정');
+
+  if (!asksAboutModel && !asksAboutProvider && !asksAboutConfig) {
+    return null;
+  }
+
+  return renderConfigSummary(config);
 }
 
 function ensureProviderReady(config: AgentConfig): void {
   if (config.provider === 'openai' && !config.apiKey) {
     throw new Error(
       'The openai provider requires an API key. Set OPENAI_API_KEY in .env or use /api-key in the REPL.'
+    );
+  }
+
+  if (config.provider === 'openai' && !config.model.trim()) {
+    throw new Error(
+      'The openai provider requires a model name. Use /model <name> or set OPENAI_MODEL_NAME in .env.'
+    );
+  }
+
+  if (!isModelCompatible(config.provider, config.model)) {
+    throw new Error(
+      `The model \`${config.model}\` is not compatible with provider \`${config.provider}\`. Use /models to inspect choices or /model default to reset.`
     );
   }
 }
@@ -105,6 +161,9 @@ async function main(): Promise<void> {
   const persistLaunchSettings = async (updates: Record<string, string>): Promise<boolean> => {
     try {
       await updateDotEnv(launchCwd, updates);
+      for (const [key, value] of Object.entries(updates)) {
+        process.env[key] = value;
+      }
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -124,8 +183,13 @@ async function main(): Promise<void> {
   };
 
   const runPrompt = async (text: string): Promise<void> => {
-    ensureProviderReady(config);
+    const runtimeAnswer = answerRuntimeConfigQuestion(text, config);
     console.log(`\n[user] ${text}`);
+    if (runtimeAnswer) {
+      console.log(`\n[assistant] ${runtimeAnswer}\n`);
+      return;
+    }
+    ensureProviderReady(config);
     const reply = await agent.runTurn(text);
     console.log(`\n[assistant] ${reply}\n`);
   };
@@ -179,26 +243,34 @@ async function main(): Promise<void> {
       if (entry.startsWith('/provider ')) {
         const provider = normalizeProvider(entry.slice('/provider '.length));
         if (!provider) {
-          console.log('\nUnknown provider. Use ollama or openai.');
+          console.log('\nUnknown provider. Use ollama, openai, or codex.');
           continue;
         }
 
-        const oldProvider = config.provider;
-        const oldDefault = providerDefaultBaseUrl(oldProvider);
-        const nextDefault = providerDefaultBaseUrl(provider);
-        const nextBaseUrl = config.baseUrl === oldDefault ? nextDefault : config.baseUrl;
+        const nextBaseUrlKey = providerBaseUrlEnvKey(provider);
+        const nextBaseUrl =
+          (nextBaseUrlKey ? process.env[nextBaseUrlKey] : undefined) ?? providerDefaultBaseUrl(provider);
+        const nextModel = resolveStoredModelForProvider(provider, process.env, {
+          allowLegacy: false,
+        });
 
         rebuildRuntime(
           updateConfig(config, {
             provider,
             baseUrl: nextBaseUrl,
+            model: nextModel,
           }),
           true
         );
-        const saved = await persistLaunchSettings({
+        const updates: Record<string, string> = {
           MODEL_PROVIDER: provider,
-          [provider === 'openai' ? 'OPENAI_BASE_URL' : 'OLLAMA_BASE_URL']: nextBaseUrl,
-        });
+          MODEL_NAME: '',
+          [providerModelEnvKey(provider)]: nextModel,
+        };
+        if (nextBaseUrlKey) {
+          updates[nextBaseUrlKey] = nextBaseUrl;
+        }
+        const saved = await persistLaunchSettings(updates);
         console.log(
           `\nProvider switched to ${provider}. Conversation reset.${saved ? ' Saved to .env.' : ''}`
         );
@@ -206,7 +278,15 @@ async function main(): Promise<void> {
       }
 
       if (entry.startsWith('/model ')) {
-        const nextModel = entry.slice('/model '.length).trim();
+        const requestedModel = entry.slice('/model '.length).trim();
+        const nextModel =
+          requestedModel.toLowerCase() === 'default' ? providerDefaultModel(config.provider) : requestedModel;
+        if (requestedModel && requestedModel.toLowerCase() !== 'default' && !isModelCompatible(config.provider, nextModel)) {
+          console.log(
+            `\nThe model "${nextModel}" does not look compatible with provider ${config.provider}. Use /models to inspect choices or /model default to reset.`
+          );
+          continue;
+        }
         rebuildRuntime(
           updateConfig(config, {
             model: nextModel,
@@ -214,15 +294,39 @@ async function main(): Promise<void> {
           true
         );
         const saved = await persistLaunchSettings({
-          MODEL_NAME: nextModel,
+          MODEL_NAME: '',
+          [providerModelEnvKey(config.provider)]: nextModel,
         });
         console.log(
-          `\nModel switched to ${config.model}. Conversation reset.${saved ? ' Saved to .env.' : ''}`
+          `\nModel switched to ${config.model || '(provider default)'}. Conversation reset.${saved ? ' Saved to .env.' : ''}`
         );
         continue;
       }
 
+      if (entry.startsWith('/models')) {
+        const requestedScope = entry.slice('/models'.length).trim().toLowerCase();
+        const scope =
+          !requestedScope || requestedScope === 'current'
+            ? 'current'
+            : requestedScope === 'all'
+              ? 'all'
+              : normalizeProvider(requestedScope);
+
+        if (!scope) {
+          console.log('\nUse /models, /models all, or /models <ollama|openai|codex>.');
+          continue;
+        }
+
+        console.log(`\n${await renderModelCatalogs(config, scope)}`);
+        continue;
+      }
+
       if (entry.startsWith('/base-url ')) {
+        if (config.provider === 'codex') {
+          console.log('\nThe codex provider uses the local codex CLI, so base URL is not used.');
+          continue;
+        }
+
         const nextBaseUrl = entry.slice('/base-url '.length).trim().replace(/\/+$/, '');
         rebuildRuntime(
           updateConfig(config, {
@@ -230,14 +334,22 @@ async function main(): Promise<void> {
           }),
           true
         );
-        const saved = await persistLaunchSettings({
-          [config.provider === 'openai' ? 'OPENAI_BASE_URL' : 'OLLAMA_BASE_URL']: nextBaseUrl,
-        });
+        const currentBaseUrlKey = providerBaseUrlEnvKey(config.provider);
+        const saved = await persistLaunchSettings(
+          currentBaseUrlKey ? { [currentBaseUrlKey]: nextBaseUrl } : {}
+        );
         console.log(`\nBase URL updated. Conversation reset.${saved ? ' Saved to .env.' : ''}`);
         continue;
       }
 
       if (entry.startsWith('/api-key ')) {
+        if (config.provider === 'codex') {
+          console.log(
+            '\nThe codex provider uses ChatGPT login through codex CLI, so API keys are not used.'
+          );
+          continue;
+        }
+
         rebuildRuntime(
           updateConfig(config, {
             apiKey: entry.slice('/api-key '.length).trim(),

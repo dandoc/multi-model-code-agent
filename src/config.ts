@@ -1,6 +1,12 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import {
+  isModelCompatible,
+  providerDefaultBaseUrl as getProviderDefaultBaseUrl,
+  providerDefaultModel as getProviderDefaultModel,
+  resolveStoredModelForProvider,
+} from './providerModels.js';
 import type { AgentConfig, ModelProvider, ParsedCliInput } from './types.js';
 
 type ArgValue = string | boolean;
@@ -10,11 +16,10 @@ function normalizeProvider(input: string | undefined): ModelProvider {
   if (value === 'openai' || value === 'openai-compatible') {
     return 'openai';
   }
+  if (value === 'codex') {
+    return 'codex';
+  }
   return 'ollama';
-}
-
-function defaultBaseUrl(provider: ModelProvider): string {
-  return provider === 'openai' ? 'https://api.openai.com/v1' : 'http://127.0.0.1:11434';
 }
 
 function parseBoolean(input: string | boolean | undefined, fallback: boolean): boolean {
@@ -86,8 +91,10 @@ function parseArgs(argv: string[]): { flags: Record<string, ArgValue>; prompt?: 
 
 export function createConfigFromInputs(argv: string[]): ParsedCliInput {
   const parsed = parseArgs(argv);
+  const providerFlag =
+    typeof parsed.flags.provider === 'string' ? parsed.flags.provider : undefined;
   const provider = normalizeProvider(
-    typeof parsed.flags.provider === 'string' ? parsed.flags.provider : process.env.MODEL_PROVIDER
+    providerFlag ?? process.env.MODEL_PROVIDER
   );
 
   const workdir = resolve(
@@ -100,21 +107,27 @@ export function createConfigFromInputs(argv: string[]): ParsedCliInput {
     throw new Error(`Workdir does not exist: ${workdir}`);
   }
 
-  const model =
-    (typeof parsed.flags.model === 'string' ? parsed.flags.model : process.env.MODEL_NAME) ||
-    'qwen2.5-coder:7b';
+  const modelInput =
+    typeof parsed.flags.model === 'string'
+      ? parsed.flags.model
+      : providerFlag
+        ? resolveStoredModelForProvider(provider, process.env, { allowLegacy: false })
+        : resolveStoredModelForProvider(provider);
+  const model = isModelCompatible(provider, modelInput) ? modelInput : getProviderDefaultModel(provider);
 
   const baseUrlInput =
     typeof parsed.flags['base-url'] === 'string'
       ? parsed.flags['base-url']
       : provider === 'openai'
         ? process.env.OPENAI_BASE_URL
-        : process.env.OLLAMA_BASE_URL;
+        : provider === 'ollama'
+          ? process.env.OLLAMA_BASE_URL
+          : undefined;
 
   const config: AgentConfig = {
     provider,
     model,
-    baseUrl: (baseUrlInput || defaultBaseUrl(provider)).replace(/\/+$/, ''),
+    baseUrl: (baseUrlInput || getProviderDefaultBaseUrl(provider)).replace(/\/+$/, ''),
     apiKey:
       typeof parsed.flags['api-key'] === 'string'
         ? parsed.flags['api-key']
@@ -147,8 +160,8 @@ export function createConfigFromInputs(argv: string[]): ParsedCliInput {
 export function renderConfigSummary(config: AgentConfig): string {
   const lines = [
     `provider     ${config.provider}`,
-    `model        ${config.model}`,
-    `baseUrl      ${config.baseUrl}`,
+    `model        ${config.model || '(provider default)'}`,
+    `baseUrl      ${config.provider === 'codex' ? '(managed by codex CLI)' : config.baseUrl}`,
     `workdir      ${config.workdir}`,
     `autoApprove  ${config.autoApprove}`,
     `maxTurns     ${config.maxTurns}`,
@@ -157,6 +170,10 @@ export function renderConfigSummary(config: AgentConfig): string {
 
   if (config.provider === 'openai') {
     lines.push(`apiKey       ${config.apiKey ? 'set' : 'missing'}`);
+  }
+
+  if (config.provider === 'codex') {
+    lines.push('auth         ChatGPT login via codex CLI');
   }
 
   return lines.join('\n');
@@ -170,5 +187,9 @@ export function updateConfig(current: AgentConfig, patch: Partial<AgentConfig>):
 }
 
 export function providerDefaultBaseUrl(provider: ModelProvider): string {
-  return defaultBaseUrl(provider);
+  return getProviderDefaultBaseUrl(provider);
+}
+
+export function providerDefaultModel(provider: ModelProvider): string {
+  return getProviderDefaultModel(provider);
 }

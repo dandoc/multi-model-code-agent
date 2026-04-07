@@ -1,4 +1,4 @@
-export type ModelProvider = 'ollama' | 'openai';
+export type ModelProvider = 'ollama' | 'openai' | 'codex';
 
 export type ChatRole = 'system' | 'user' | 'assistant';
 
