@@ -114,3 +114,11 @@
 - `find_entrypoint`
 - `summarize_project`
 - `summarize_config`
+## Milestone 2 addendum
+
+Current Milestone 2 coverage now also includes workspace-local file creation:
+
+- the prompt explicitly allows creating files and nested folders inside `workdir`
+- the agent retries if the model refuses a safe workspace-local create request
+- the agent also retries if the model claims creation is complete without a real `write_patch` result
+- `npm run smoke` now verifies this path with a temporary workspace

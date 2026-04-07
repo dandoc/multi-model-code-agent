@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { formatToolResultForModel, parseAgentEnvelope } from './jsonProtocol.js';
 import { buildSystemPrompt } from './prompt.js';
 import { previewWritePatch, renderWritePatchPreview } from './writePatchPreview.js';
@@ -120,6 +122,39 @@ export class AgentRunner {
 
   private isConfigQuestion(userInput: string): boolean {
     return matchesAnyKeyword(userInput, CONFIG_KEYWORDS);
+  }
+
+  private looksLikeWorkspaceLocalCreationTask(userInput: string): boolean {
+    const normalized = userInput.toLowerCase();
+    const hasCreationIntent =
+      /(?:^|\s)(?:create|make|generate|write|add)\b/.test(normalized) ||
+      /만들|생성|작성|추가/.test(userInput);
+    const hasFileOrFolderIntent =
+      /\b(?:file|files|folder|directory|directories|dir)\b/.test(normalized) ||
+      /파일|폴더|디렉터리|폴더를|파일을/.test(userInput);
+    const hasCodeArtifactHint =
+      /\b(?:c\+\+|python|java|c#|cpp|source code)\b/.test(normalized) ||
+      /\.(?:c|cpp|py|java|cs)\b/i.test(userInput);
+
+    return hasCreationIntent && (hasFileOrFolderIntent || hasCodeArtifactHint);
+  }
+
+  private mentionsExplicitOutsidePath(userInput: string): boolean {
+    const windowsPaths = userInput.match(/[A-Za-z]:\\[^\s"'`]+/g) ?? [];
+    const normalizedWorkdir = this.config.workdir.toLowerCase();
+
+    if (windowsPaths.some((pathValue) => !pathValue.toLowerCase().startsWith(normalizedWorkdir))) {
+      return true;
+    }
+
+    return /\.\.[\\/]/.test(userInput);
+  }
+
+  private isSafeWorkspaceLocalCreationTask(userInput: string): boolean {
+    return (
+      this.looksLikeWorkspaceLocalCreationTask(userInput) &&
+      !this.mentionsExplicitOutsidePath(userInput)
+    );
   }
 
   private requiresFileAnchoredAnswer(userInput: string): boolean {
@@ -357,6 +392,26 @@ export class AgentRunner {
     return false;
   }
 
+  private looksLikeGenericRefusal(text: string): boolean {
+    return /(?:i(?:'| a)m sorry|can't assist|cannot assist|can not assist|unable to assist|outside of the workspace|outside of the workspace root|outside the workspace|denied because)/i.test(
+      text
+    );
+  }
+
+  private buildWorkspaceCreationRetryInstruction(): string {
+    const workspaceName = path.basename(this.config.workdir);
+
+    return [
+      'The previous refusal was incorrect.',
+      `The current workspace root is ${this.config.workdir}.`,
+      'Creating files and nested directories inside this workspace is allowed.',
+      'Use write_patch with operation="create" for each new file. Parent directories will be created automatically.',
+      `If the user says "${workspaceName} dir 안에" or "inside ${workspaceName}", treat that as inside the current workspace root.`,
+      'Do not refuse unless the user explicitly asks for a path outside the current workspace.',
+      'Continue with the file creation task now.',
+    ].join('\n');
+  }
+
   private isLikelyKorean(text: string): boolean {
     return /[\u3131-\uD79D]/.test(text) || /\bin korean\b/i.test(text) || /\uD55C\uAD6D\uC5B4/.test(text);
   }
@@ -398,6 +453,27 @@ export class AgentRunner {
 
       return pathValue && reasonValue ? [{ path: pathValue, reason: reasonValue }] : [];
     });
+  }
+
+  private countToolResults(toolName: ToolDefinition['name']): number {
+    return this.history.filter(
+      (message) => message.role === 'user' && message.content.includes(`TOOL RESULT: ${toolName}`)
+    ).length;
+  }
+
+  private looksLikeTaskCompletionClaim(text: string): boolean {
+    return /(?:\bdone\b|\bcompleted\b|\bcreated\b|\bfinished\b|\bupdated\b|\bwrote\b|완료|생성|만들었|작성)/i.test(
+      text
+    );
+  }
+
+  private buildCreationToolUseRetryInstruction(): string {
+    return [
+      'You have not created any files yet.',
+      'The user asked for real files and folders inside the current workspace.',
+      'Do not say the task is complete until you have successful write_patch tool results.',
+      'Use write_patch now to create the requested files.',
+    ].join('\n');
   }
 
   private getPreferredBootstrapResult(
@@ -994,6 +1070,9 @@ export class AgentRunner {
     let invalidResponseCount = 0;
     let ungroundedAnswerCount = 0;
     let styleRewriteCount = 0;
+    let creationRefusalCount = 0;
+    let creationNoToolCount = 0;
+    const initialWritePatchCount = this.countToolResults('write_patch');
 
     for (let step = 1; step <= this.config.maxTurns; step += 1) {
       const rawResponse = await this.adapter.complete(this.buildMessages(), this.config);
@@ -1026,6 +1105,70 @@ export class AgentRunner {
               'If you need a tool, return a valid JSON tool_call.',
               'If you are ready to answer, return a JSON message with a plain-language answer based only on real tool outputs already provided.',
             ].join('\n'),
+          });
+          continue;
+        }
+
+        if (
+          this.isSafeWorkspaceLocalCreationTask(userInput) &&
+          this.looksLikeGenericRefusal(envelope.message)
+        ) {
+          creationRefusalCount += 1;
+
+          if (creationRefusalCount >= 2) {
+            const fallback = [
+              'The model kept refusing a workspace-local file creation task even after clarification.',
+              `Creating files and folders inside \`${this.config.workdir}\` is allowed.`,
+              'Please retry the request or switch to a stronger model if this keeps happening.',
+            ].join('\n');
+            this.ui.log(
+              'Model kept refusing a safe workspace-local creation task. Returning a corrective fallback.'
+            );
+            this.history.push({
+              role: 'assistant',
+              content: fallback,
+            });
+            return fallback;
+          }
+
+          this.ui.log(
+            'Model refused a safe workspace-local creation task. Asking it to use write_patch.'
+          );
+          this.history.push({
+            role: 'user',
+            content: this.buildWorkspaceCreationRetryInstruction(),
+          });
+          continue;
+        }
+
+        if (
+          this.isSafeWorkspaceLocalCreationTask(userInput) &&
+          this.countToolResults('write_patch') === initialWritePatchCount &&
+          this.looksLikeTaskCompletionClaim(envelope.message)
+        ) {
+          creationNoToolCount += 1;
+
+          if (creationNoToolCount >= 2) {
+            const fallback = [
+              'The model claimed the files were created, but no successful write_patch call actually happened.',
+              `Please retry the request inside \`${this.config.workdir}\`, or switch to a stronger model if this keeps happening.`,
+            ].join('\n');
+            this.ui.log(
+              'Model claimed a workspace-local creation task was done without using write_patch. Returning a corrective fallback.'
+            );
+            this.history.push({
+              role: 'assistant',
+              content: fallback,
+            });
+            return fallback;
+          }
+
+          this.ui.log(
+            'Model claimed a workspace-local creation task was done without using write_patch. Asking it to actually create the files.'
+          );
+          this.history.push({
+            role: 'user',
+            content: this.buildCreationToolUseRetryInstruction(),
           });
           continue;
         }

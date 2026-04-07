@@ -1,3 +1,7 @@
+import { existsSync } from 'node:fs';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { exec as execCallback } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -79,6 +83,50 @@ async function runPromptSmokeTest(config: AgentConfig, testCase: SmokeCase): Pro
   assertIncludesAll(reply, testCase.expectedSnippets, testCase.name);
 }
 
+async function runWorkspaceCreateSmokeTest(config: AgentConfig): Promise<void> {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'mmca-smoke-'));
+  const workspaceName = path.basename(tempRoot);
+  const targetDir = path.join(tempRoot, 'smoke-output');
+  const targetFile = path.join(targetDir, 'hello.txt');
+  const prompt = `${workspaceName} dir 안에 smoke-output 폴더를 만들고 hello.txt 파일을 만들어서 Hello Smoke!를 써줘`;
+  const tools = createTools();
+  const adapter = createModelAdapter({
+    ...config,
+    workdir: tempRoot,
+    autoApprove: true,
+  });
+  const agent = new AgentRunner(
+    {
+      ...config,
+      workdir: tempRoot,
+      autoApprove: true,
+    },
+    adapter,
+    tools,
+    createSilentUi()
+  );
+
+  try {
+    console.log(`\n[smoke] Workspace-local file creation`);
+    console.log(`[smoke] prompt: ${prompt}`);
+    const reply = await agent.runTurn(prompt);
+    console.log(`[smoke] reply:\n${reply}\n`);
+
+    if (!existsSync(targetFile)) {
+      throw new Error(`Workspace-local file creation failed. Missing file: ${targetFile}`);
+    }
+
+    const content = await readFile(targetFile, 'utf8');
+    if (!content.includes('Hello Smoke!')) {
+      throw new Error(
+        `Workspace-local file creation failed. Unexpected content in ${targetFile}: ${content}`
+      );
+    }
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   const npm = getNpmCommand();
   const config = buildSmokeConfig();
@@ -114,6 +162,8 @@ async function main(): Promise<void> {
   for (const testCase of cases) {
     await runPromptSmokeTest(config, testCase);
   }
+
+  await runWorkspaceCreateSmokeTest(config);
 
   console.log('\n[smoke] All smoke checks passed.');
 }

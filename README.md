@@ -123,6 +123,7 @@ This runs:
 - a project-structure prompt check
 - an entrypoint-flow prompt check
 - a config-summary prompt check
+- a workspace-local file-creation check
 
 ## Good first prompts
 
@@ -156,6 +157,7 @@ Then set `OPENAI_API_KEY` in `.env`, or use `/api-key ...` inside the REPL.
 - `write_patch` requires approval unless auto-approve is on
 - `run_shell` requires approval unless auto-approve is on
 - file access is restricted to the chosen `workdir`
+- creating new files and nested folders inside `workdir` is allowed
 
 ## Edit approvals
 
@@ -163,6 +165,8 @@ Then set `OPENAI_API_KEY` in `.env`, or use `/api-key ...` inside the REPL.
 
 - for `replace`, the file path, match count, first match line, and before/after snippets
 - for `create`, the target path, whether overwrite is on, and a short content preview
+
+If the user asks to create files inside the current workspace, the agent should use `write_patch` instead of refusing the request.
 
 This is the first step of Milestone 2, which focuses on safer and more understandable edits.
 

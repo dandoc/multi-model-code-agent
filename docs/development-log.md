@@ -168,3 +168,17 @@
 - `npm run typecheck`
 - `npm run build`
 - 임시 작업 디렉터리에서 `create`와 `replace` 승인 메시지 및 결과 출력 확인
+### Milestone 2 follow-up: workspace-local file creation reliability
+
+Summary:
+
+- clarified in the system prompt that creating files and nested folders inside the current workspace is allowed
+- if the model refuses a safe workspace-local create task, the agent now asks it to use `write_patch`
+- if the model claims the work is done without a successful `write_patch` result, the agent now forces a real file-creation step
+- added smoke coverage for a workspace-local file-creation request that mentions the workspace directory by name
+
+Validation:
+
+- reproduced the failure with a Korean prompt that asked for a `테스트` folder and several language files
+- confirmed that the agent created real files only after the new correction loop
+- `npm run smoke`
