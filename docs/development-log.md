@@ -307,6 +307,7 @@ Summary:
 - `walkFiles` and `list_files` now skip out-of-root linked directories and avoid recursive loops through in-root links
 - `/workdir` now reuses the same startup validation path instead of accepting missing or non-directory targets at runtime
 - added `npm run smoke:paths` to cover canonical path checks, traversal safety, runtime workdir validation, and tool-level rejection for `read_file`, `read_multiple_files`, and `write_patch`
+- `npm run smoke` now includes both the original repo-analysis smoke flow and `smoke:paths` so path regressions stay in the default verification path
 
 Validation:
 

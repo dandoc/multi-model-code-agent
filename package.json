@@ -12,7 +12,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "smoke": "tsx src/smoke.ts",
+    "smoke": "npm run smoke:core && npm run smoke:paths",
+    "smoke:core": "tsx src/smoke.ts",
     "smoke:failures": "tsx src/writePatchFailureSmoke.ts",
     "smoke:batch": "tsx src/writePatchBatchSmoke.ts",
     "smoke:paths": "tsx src/pathSecuritySmoke.ts"
