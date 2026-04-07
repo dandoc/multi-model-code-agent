@@ -624,6 +624,15 @@ export async function analyzeConfig(rootDir: string): Promise<ConfigSummaryRepor
         configFlow.push('src/index.ts builds the runtime config from CLI inputs.');
       }
     }
+
+    if (relativePath === 'README.md') {
+      if (source.includes('.env.example')) {
+        configFlow.push('README.md explains how to create and use the .env file.');
+      }
+      if (source.includes('--provider') || source.includes('--model') || source.includes('/config')) {
+        configFlow.push('README.md documents the main startup flags and REPL config commands.');
+      }
+    }
   }
 
   return {

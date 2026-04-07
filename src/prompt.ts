@@ -22,6 +22,7 @@ export function buildSystemPrompt(config: AgentConfig, tools: ToolDefinition[]):
     '- If the user asks for the main file, entrypoint, startup flow, or execution flow, prefer find_entrypoint first.',
     '- For entrypoint explanations, prefer a short natural explanation of the real startup flow over a numbered import dump.',
     '- If the user asks about config, env vars, or how settings are parsed, prefer summarize_config first.',
+    '- For config explanations, prefer a short natural explanation of where settings are defined and how they become runtime config.',
     '- Use list_files when you need an extra tree view after summarize_project.',
     '- Prefer search_files and read_file before write_patch.',
     '- If the user mentions multiple files, use read_multiple_files instead of answering from memory.',

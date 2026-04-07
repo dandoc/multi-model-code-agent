@@ -153,6 +153,11 @@ export class AgentRunner {
     return fileReferenceCount < 1;
   }
 
+  private looksLikeNumberedChecklist(text: string): boolean {
+    const numberedLines = text.match(/^\s*\d+\.\s/mg) ?? [];
+    return numberedLines.length >= 3;
+  }
+
   private extractExplicitFilePaths(userInput: string): string[] {
     const matches =
       userInput.match(
@@ -298,7 +303,7 @@ export class AgentRunner {
       'summarize_config',
       'Bootstrapping config context with summarize_config...',
       'Config bootstrap for the current workspace.',
-      'Use this deterministic config summary instead of guessing.'
+      'Use this deterministic config summary instead of guessing. Prefer a short natural explanation over a numbered checklist.'
     );
   }
 
@@ -717,6 +722,132 @@ export class AgentRunner {
     return paragraphs.join('\n\n');
   }
 
+  private buildConfigNarrativeKorean(
+    configFiles: string[],
+    envVariables: string[],
+    cliFlags: string[],
+    configFlow: string[]
+  ): string {
+    const paragraphs: string[] = [];
+    const hasEnvDoc = configFlow.includes('.env.example documents the supported environment variables.');
+    const loadsDotEnv = configFlow.includes(
+      'src/index.ts loads .env values before building the runtime config.'
+    );
+    const buildsFromCli = configFlow.includes('src/index.ts builds the runtime config from CLI inputs.');
+    const mergesDefaults = configFlow.includes('src/config.ts merges CLI flags with process.env defaults.');
+    const readmeExplainsEnv = configFlow.includes('README.md explains how to create and use the .env file.');
+    const readmeExplainsCommands = configFlow.includes(
+      'README.md documents the main startup flags and REPL config commands.'
+    );
+
+    if (configFiles.length > 0) {
+      paragraphs.push(
+        `설정과 관련해 먼저 보면 좋은 파일은 ${this.formatDisplayPaths(configFiles).join(', ')} 입니다.`
+      );
+    }
+
+    const flowParts: string[] = [];
+    if (hasEnvDoc) {
+      flowParts.push('`.env.example`에는 지원하는 환경 변수가 정리되어 있습니다.');
+    }
+    if (loadsDotEnv && mergesDefaults) {
+      flowParts.push(
+        '실행이 시작되면 `src/index.ts`가 `.env` 값을 먼저 불러오고, `src/config.ts`가 CLI 인자와 환경 변수 기본값을 합쳐 런타임 설정을 만듭니다.'
+      );
+    } else if (loadsDotEnv) {
+      flowParts.push('실행 시 `src/index.ts`가 `.env` 값을 먼저 불러옵니다.');
+    } else if (mergesDefaults || buildsFromCli) {
+      flowParts.push('실행 시 `src/config.ts`와 `src/index.ts`가 CLI 인자와 기본값을 바탕으로 런타임 설정을 만듭니다.');
+    }
+    if (readmeExplainsEnv || readmeExplainsCommands) {
+      const readmeDetails: string[] = [];
+      if (readmeExplainsEnv) {
+        readmeDetails.push('`.env` 파일을 만드는 방법');
+      }
+      if (readmeExplainsCommands) {
+        readmeDetails.push('주요 실행 옵션과 REPL 명령');
+      }
+      flowParts.push(`또한 \`README.md\`에는 ${this.joinNaturalKorean(readmeDetails)}이 정리되어 있습니다.`);
+    }
+    if (flowParts.length > 0) {
+      paragraphs.push(flowParts.join(' '));
+    }
+
+    if (envVariables.length > 0) {
+      paragraphs.push(`주요 환경 변수는 ${envVariables.map((item) => `\`${item}\``).join(', ')} 입니다.`);
+    }
+
+    if (cliFlags.length > 0) {
+      paragraphs.push(
+        `CLI에서 바로 바꿀 수 있는 옵션은 ${cliFlags.map((item) => `\`${item}\``).join(', ')} 입니다.`
+      );
+    }
+
+    return paragraphs.join('\n\n');
+  }
+
+  private buildConfigNarrativeEnglish(
+    configFiles: string[],
+    envVariables: string[],
+    cliFlags: string[],
+    configFlow: string[]
+  ): string {
+    const paragraphs: string[] = [];
+    const hasEnvDoc = configFlow.includes('.env.example documents the supported environment variables.');
+    const loadsDotEnv = configFlow.includes(
+      'src/index.ts loads .env values before building the runtime config.'
+    );
+    const buildsFromCli = configFlow.includes('src/index.ts builds the runtime config from CLI inputs.');
+    const mergesDefaults = configFlow.includes('src/config.ts merges CLI flags with process.env defaults.');
+    const readmeExplainsEnv = configFlow.includes('README.md explains how to create and use the .env file.');
+    const readmeExplainsCommands = configFlow.includes(
+      'README.md documents the main startup flags and REPL config commands.'
+    );
+
+    if (configFiles.length > 0) {
+      paragraphs.push(`The main config-related files are ${this.formatDisplayPaths(configFiles).join(', ')}.`);
+    }
+
+    const flowParts: string[] = [];
+    if (hasEnvDoc) {
+      flowParts.push('`.env.example` lists the supported environment variables.');
+    }
+    if (loadsDotEnv && mergesDefaults) {
+      flowParts.push(
+        '`src/index.ts` loads `.env` values first, then `src/config.ts` combines CLI arguments and environment defaults into the runtime config.'
+      );
+    } else if (loadsDotEnv) {
+      flowParts.push('`src/index.ts` loads `.env` values before runtime setup.');
+    } else if (mergesDefaults || buildsFromCli) {
+      flowParts.push('`src/config.ts` and `src/index.ts` build the runtime config from CLI input and defaults.');
+    }
+    if (readmeExplainsEnv || readmeExplainsCommands) {
+      const readmeDetails: string[] = [];
+      if (readmeExplainsEnv) {
+        readmeDetails.push('how to create the `.env` file');
+      }
+      if (readmeExplainsCommands) {
+        readmeDetails.push('the main startup flags and REPL commands');
+      }
+      flowParts.push(`\`README.md\` also documents ${this.joinNaturalEnglish(readmeDetails)}.`);
+    }
+    if (flowParts.length > 0) {
+      paragraphs.push(flowParts.join(' '));
+    }
+
+    if (envVariables.length > 0) {
+      paragraphs.push(
+        `Key environment variables are ${envVariables.map((item) => `\`${item}\``).join(', ')}.`
+      );
+    }
+
+    if (cliFlags.length > 0) {
+      paragraphs.push(`CLI options you can change directly are ${cliFlags.map((item) => `\`${item}\``).join(', ')}.`);
+    }
+
+    return paragraphs.join('\n\n');
+  }
+
   private buildDeterministicFallback(userInput: string): string | null {
     const preferred = this.getPreferredBootstrapResult(userInput);
     if (!preferred) {
@@ -794,34 +925,10 @@ export class AgentRunner {
       const configFlow = this.getStringArrayMetadata(metadata, 'configFlow');
 
       if (korean) {
-        return [
-          configFiles.length > 0
-            ? `\uC124\uC815 \uAD00\uB828 \uD575\uC2EC \uD30C\uC77C\uC740 ${this.formatDisplayPaths(configFiles).join(', ')} \uC785\uB2C8\uB2E4.`
-            : '\uC124\uC815 \uAD00\uB828 \uD30C\uC77C\uC744 \uC544\uC9C1 \uCC3E\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.',
-          envVariables.length > 0
-            ? `\uD658\uACBD \uBCC0\uC218\uB294 ${envVariables.map((item) => `\`${item}\``).join(', ')} \uC785\uB2C8\uB2E4.`
-            : '',
-          cliFlags.length > 0
-            ? `CLI \uD50C\uB798\uADF8\uB294 ${cliFlags.map((item) => `\`${item}\``).join(', ')} \uC785\uB2C8\uB2E4.`
-            : '',
-          configFlow.length > 0
-            ? `\uC124\uC815 \uD750\uB984\uC740 ${configFlow.join(' ')}`
-            : '',
-        ]
-          .filter(Boolean)
-          .join('\n');
+        return this.buildConfigNarrativeKorean(configFiles, envVariables, cliFlags, configFlow);
       }
 
-      return [
-        configFiles.length > 0 ? `Config files: ${this.formatDisplayPaths(configFiles).join(', ')}.` : '',
-        envVariables.length > 0
-          ? `Environment variables: ${envVariables.map((item) => `\`${item}\``).join(', ')}.`
-          : '',
-        cliFlags.length > 0 ? `CLI flags: ${cliFlags.map((item) => `\`${item}\``).join(', ')}.` : '',
-        configFlow.length > 0 ? `Config flow: ${configFlow.join(' ')}` : '',
-      ]
-        .filter(Boolean)
-        .join('\n');
+      return this.buildConfigNarrativeEnglish(configFiles, envVariables, cliFlags, configFlow);
     }
 
     return null;
@@ -841,6 +948,7 @@ export class AgentRunner {
 
     let invalidResponseCount = 0;
     let ungroundedAnswerCount = 0;
+    let styleRewriteCount = 0;
 
     for (let step = 1; step <= this.config.maxTurns; step += 1) {
       const rawResponse = await this.adapter.complete(this.buildMessages(), this.config);
@@ -900,6 +1008,30 @@ export class AgentRunner {
               'Answer again using only the real tool outputs already in the conversation.',
               'You must mention the exact file paths you relied on.',
               'If you still do not have enough evidence, call another tool instead of guessing.',
+            ].join('\n'),
+          });
+          continue;
+        }
+
+        if (this.isConfigQuestion(userInput) && this.looksLikeNumberedChecklist(envelope.message)) {
+          styleRewriteCount += 1;
+          const fallback = this.buildDeterministicFallback(userInput);
+          if (fallback && styleRewriteCount >= 2) {
+            this.ui.log('Model kept using a checklist style for config. Returning deterministic fallback.');
+            this.history.push({
+              role: 'assistant',
+              content: fallback,
+            });
+            return fallback;
+          }
+
+          this.ui.log('Model answered with a checklist style. Asking it to rewrite naturally.');
+          this.history.push({
+            role: 'user',
+            content: [
+              'Rewrite the answer as short natural paragraphs.',
+              'Do not use a numbered checklist.',
+              'Keep the same concrete file references and real config details.',
             ].join('\n'),
           });
           continue;
