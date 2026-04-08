@@ -105,6 +105,7 @@ npm run dev
 
 - `/help`
 - `/config`
+- `/history [count]`
 - `/tools`
 - `/reset`
 - `/provider ollama|openai|codex` persists to `.env`
@@ -134,6 +135,16 @@ This runs:
 - a config-summary prompt check
 - a workspace-local file-creation check
 - a `.env` persistence check
+- a path-boundary regression check
+- a session-history persistence and redaction check
+
+## Session history
+
+Each REPL session now writes a small JSONL log so you can inspect recent activity with `/history`.
+
+- default location: `%USERPROFILE%\\.multi-model-code-agent\\sessions`
+- override location: set `MM_AGENT_HOME`
+- sensitive values such as `/api-key ...` are redacted before they are written
 
 ## Good first prompts
 

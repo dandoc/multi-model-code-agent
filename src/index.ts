@@ -20,6 +20,7 @@ import {
   renderModelCatalogs,
   resolveStoredModelForProvider,
 } from './providerModels.js';
+import { createSessionStore, renderSessionHistory } from './sessionStore.js';
 import { createTools, renderToolCatalog } from './tools.js';
 
 import type { AgentConfig, ModelProvider } from './types.js';
@@ -56,6 +57,7 @@ function printReplHelp(): void {
       'REPL commands:',
       '  /help                 Show this help',
       '  /config               Show current config',
+      '  /history [count]      Show recent events from the current saved session',
       '  /tools                Show tool catalog',
       '  /reset                Clear conversation history',
       '  /provider <name>      Switch provider (ollama, openai, codex) and save it to .env',
@@ -146,6 +148,7 @@ async function main(): Promise<void> {
 
   let config = parsed.config;
   let adapter = createModelAdapter(config);
+  let sessionStore = await createSessionStore(config, launchCwd, parsed.prompt ? 'one-shot' : 'startup');
 
   const ui = {
     confirm: async (message: string): Promise<boolean> => {
@@ -158,6 +161,15 @@ async function main(): Promise<void> {
   };
 
   const agent = new AgentRunner(config, adapter, tools, ui);
+
+  const logSessionEvent = async (action: () => Promise<void>): Promise<void> => {
+    try {
+      await action();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`\nWarning: could not write session log: ${message}`);
+    }
+  };
 
   const persistLaunchSettings = async (updates: Record<string, string>): Promise<boolean> => {
     try {
@@ -186,13 +198,16 @@ async function main(): Promise<void> {
   const runPrompt = async (text: string): Promise<void> => {
     const runtimeAnswer = answerRuntimeConfigQuestion(text, config);
     console.log(`\n[user] ${text}`);
+    await logSessionEvent(() => sessionStore.logMessage('user', text));
     if (runtimeAnswer) {
       console.log(`\n[assistant] ${runtimeAnswer}\n`);
+      await logSessionEvent(() => sessionStore.logMessage('assistant', runtimeAnswer));
       return;
     }
     ensureProviderReady(config);
     const reply = await agent.runTurn(text);
     console.log(`\n[assistant] ${reply}\n`);
+    await logSessionEvent(() => sessionStore.logMessage('assistant', reply));
   };
 
   try {
@@ -221,27 +236,40 @@ async function main(): Promise<void> {
       }
 
       if (entry === '/help') {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
         printReplHelp();
         continue;
       }
 
       if (entry === '/config') {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
         console.log(`\n${renderConfigSummary(config)}`);
         continue;
       }
 
+      if (entry === '/history' || entry.startsWith('/history ')) {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
+        const requestedCount = entry === '/history' ? '12' : entry.slice('/history '.length).trim();
+        const count = Math.max(1, Math.min(50, Number.parseInt(requestedCount, 10) || 12));
+        console.log(`\n${await renderSessionHistory(sessionStore.sessionPath, count)}`);
+        continue;
+      }
+
       if (entry === '/tools') {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
         console.log(`\n${renderToolCatalog(tools)}`);
         continue;
       }
 
       if (entry === '/reset') {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
         agent.reset();
         console.log('\nConversation reset.');
         continue;
       }
 
       if (entry.startsWith('/provider ')) {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
         const provider = normalizeProvider(entry.slice('/provider '.length));
         if (!provider) {
           console.log('\nUnknown provider. Use ollama, openai, or codex.');
@@ -272,6 +300,7 @@ async function main(): Promise<void> {
           updates[nextBaseUrlKey] = nextBaseUrl;
         }
         const saved = await persistLaunchSettings(updates);
+        await logSessionEvent(() => sessionStore.logConfig('provider switch', config));
         console.log(
           `\nProvider switched to ${provider}. Conversation reset.${saved ? ' Saved to .env.' : ''}`
         );
@@ -279,6 +308,7 @@ async function main(): Promise<void> {
       }
 
       if (entry.startsWith('/model ')) {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
         const requestedModel = entry.slice('/model '.length).trim();
         const nextModel =
           requestedModel.toLowerCase() === 'default' ? providerDefaultModel(config.provider) : requestedModel;
@@ -298,6 +328,7 @@ async function main(): Promise<void> {
           MODEL_NAME: '',
           [providerModelEnvKey(config.provider)]: nextModel,
         });
+        await logSessionEvent(() => sessionStore.logConfig('model switch', config));
         console.log(
           `\nModel switched to ${config.model || '(provider default)'}. Conversation reset.${saved ? ' Saved to .env.' : ''}`
         );
@@ -305,6 +336,7 @@ async function main(): Promise<void> {
       }
 
       if (entry.startsWith('/models')) {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
         const requestedScope = entry.slice('/models'.length).trim().toLowerCase();
         const scope =
           !requestedScope || requestedScope === 'current'
@@ -323,6 +355,7 @@ async function main(): Promise<void> {
       }
 
       if (entry.startsWith('/base-url ')) {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
         if (config.provider === 'codex') {
           console.log('\nThe codex provider uses the local codex CLI, so base URL is not used.');
           continue;
@@ -339,11 +372,13 @@ async function main(): Promise<void> {
         const saved = await persistLaunchSettings(
           currentBaseUrlKey ? { [currentBaseUrlKey]: nextBaseUrl } : {}
         );
+        await logSessionEvent(() => sessionStore.logConfig('base-url update', config));
         console.log(`\nBase URL updated. Conversation reset.${saved ? ' Saved to .env.' : ''}`);
         continue;
       }
 
       if (entry.startsWith('/api-key ')) {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
         if (config.provider === 'codex') {
           console.log(
             '\nThe codex provider uses ChatGPT login through codex CLI, so API keys are not used.'
@@ -357,11 +392,13 @@ async function main(): Promise<void> {
           }),
           false
         );
+        await logSessionEvent(() => sessionStore.logConfig('api-key update', config));
         console.log('\nAPI key updated for this session.');
         continue;
       }
 
       if (entry.startsWith('/workdir ')) {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
         try {
           const nextWorkdir = resolveValidatedWorkdir(entry.slice('/workdir '.length).trim());
           rebuildRuntime(
@@ -370,6 +407,7 @@ async function main(): Promise<void> {
             }),
             true
           );
+          sessionStore = await createSessionStore(config, launchCwd, 'workdir switch');
           console.log(`\nWorkdir switched to ${nextWorkdir}. Conversation reset.`);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -379,6 +417,7 @@ async function main(): Promise<void> {
       }
 
       if (entry.startsWith('/approve ')) {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
         const mode = entry.slice('/approve '.length).trim().toLowerCase();
         if (mode !== 'on' && mode !== 'off') {
           console.log('\nUse /approve on or /approve off.');
@@ -391,13 +430,17 @@ async function main(): Promise<void> {
           }),
           false
         );
+        await logSessionEvent(() => sessionStore.logConfig('approval mode update', config));
         console.log(`\nAuto approve is now ${config.autoApprove}.`);
         continue;
       }
 
+      await logSessionEvent(() => sessionStore.logCommand(entry));
+
       console.log('\nUnknown command. Type /help.');
     }
   } finally {
+    await logSessionEvent(() => sessionStore.logCommand('/quit'));
     rl.close();
   }
 }

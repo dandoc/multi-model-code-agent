@@ -330,3 +330,19 @@ Validation:
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke:batch`
+
+### 2026-04-08 - Session history and persistence
+
+Summary:
+
+- added `src/sessionStore.ts` so each REPL session writes a JSONL event log under the local agent home directory
+- added `/history [count]` to show recent events from the current session without leaving the REPL
+- redacted `/api-key ...` commands before they are written and stored config snapshots as `apiKeySet` instead of raw secrets
+- added `npm run smoke:sessions` and folded it into the default `npm run smoke` flow
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:sessions`
+- `npm run smoke`

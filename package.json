@@ -12,11 +12,12 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "smoke": "npm run smoke:core && npm run smoke:paths",
+    "smoke": "npm run smoke:core && npm run smoke:paths && npm run smoke:sessions",
     "smoke:core": "tsx src/smoke.ts",
     "smoke:failures": "tsx src/writePatchFailureSmoke.ts",
     "smoke:batch": "tsx src/writePatchBatchSmoke.ts",
-    "smoke:paths": "tsx src/pathSecuritySmoke.ts"
+    "smoke:paths": "tsx src/pathSecuritySmoke.ts",
+    "smoke:sessions": "tsx src/sessionSmoke.ts"
   },
   "engines": {
     "node": ">=20"
