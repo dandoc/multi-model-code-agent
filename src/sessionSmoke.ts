@@ -209,8 +209,10 @@ async function main(): Promise<void> {
         `Saved sessions (2)`,
         `Root: ${expectedSessionsDir}`,
         'Warning: skipped 2 corrupted session logs and ignored malformed lines in 1 session log while scanning saved sessions.',
-        `${store.sessionId} (current): provider=ollama, model=qwen2.5-coder:14b, workdir=${workdir}, reason=session smoke`,
-        `${previousStore.sessionId}: provider=ollama, model=qwen2.5-coder:7b, workdir=${previousWorkdir}, reason=previous session smoke`,
+        `- id: ${store.sessionId} (current)`,
+        `  provider=ollama, model=qwen2.5-coder:14b, workdir=${workdir}, reason=session smoke`,
+        `- id: ${previousStore.sessionId}`,
+        `  provider=ollama, model=qwen2.5-coder:7b, workdir=${previousWorkdir}, reason=previous session smoke`,
       ],
       'rendered session list'
     );

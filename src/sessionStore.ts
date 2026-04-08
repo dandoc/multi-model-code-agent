@@ -505,8 +505,9 @@ export async function renderSessionList(limit = 8, currentSessionId?: string): P
 
   for (const entry of entries) {
     const currentLabel = entry.sessionId === currentSessionId ? ' (current)' : '';
+    lines.push(`- id: ${entry.sessionId}${currentLabel}`);
     lines.push(
-      `- ${entry.sessionId}${currentLabel}: provider=${entry.provider}, model=${entry.model || '(provider default)'}, workdir=${entry.workdir}, reason=${entry.reason}`
+      `  provider=${entry.provider}, model=${entry.model || '(provider default)'}, workdir=${entry.workdir}, reason=${entry.reason}`
     );
   }
 
