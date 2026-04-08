@@ -23,6 +23,7 @@ import {
 import {
   createSessionStore,
   loadSessionConversation,
+  renderSessionComparison,
   renderSessionHistory,
   renderSessionList,
   resolveSessionEntry,
@@ -76,6 +77,8 @@ function printReplHelp(): void {
       '  /resume latest [count] or /resume <session-id> [count]',
       '                       Replace the current conversation with saved user/assistant messages',
       '  /sessions [count]     Show recent saved sessions',
+      '  /sessions compare [count]',
+      '                       Compare recent sessions by activity profile and event counts',
       '  /sessions search <query> [count]',
       '                       Search saved sessions by title, model, provider, workdir, or reason',
       '  /session [count]      Alias for /sessions',
@@ -388,6 +391,11 @@ async function main(): Promise<void> {
               query: request.query,
             })}`
           );
+          continue;
+        }
+
+        if (request.kind === 'compare') {
+          console.log(`\n${await renderSessionComparison(request.count, sessionStore.sessionId)}`);
           continue;
         }
 

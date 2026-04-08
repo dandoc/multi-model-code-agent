@@ -71,6 +71,10 @@ export type SessionsRequest =
       count: number;
     }
   | {
+      kind: 'compare';
+      count: number;
+    }
+  | {
       kind: 'search';
       count: number;
       query: string;
@@ -92,6 +96,27 @@ export function parseSessionsRequest(entry: string): SessionsRequest {
   }
 
   const mode = args[0]?.toLowerCase();
+  if (mode === 'compare') {
+    if (args.length === 1) {
+      return {
+        kind: 'compare',
+        count: 5,
+      };
+    }
+
+    if (args.length === 2 && isWholeNumberText(args[1])) {
+      return {
+        kind: 'compare',
+        count: parsePositiveCount(args[1], 5, 20),
+      };
+    }
+
+    return {
+      kind: 'invalid',
+      reason: 'Use /sessions compare [count].',
+    };
+  }
+
   if (mode === 'search' || mode === 'find') {
     if (args.length === 1) {
       return {
@@ -133,7 +158,7 @@ export function parseSessionsRequest(entry: string): SessionsRequest {
   return {
     kind: 'invalid',
     reason:
-      'Use /sessions [count] or /sessions search <query> [count]. For a specific session use /history <session-id> or /resume <session-id>.',
+      'Use /sessions [count], /sessions compare [count], or /sessions search <query> [count]. For a specific session use /history <session-id> or /resume <session-id>.',
   };
 }
 

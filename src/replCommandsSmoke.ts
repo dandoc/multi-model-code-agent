@@ -58,6 +58,12 @@ async function main(): Promise<void> {
     'Expected /sessions find to work as a search alias.'
   );
 
+  const sessionsCompare = parseSessionsRequest('/sessions compare 6');
+  assert(
+    sessionsCompare.kind === 'compare' && sessionsCompare.count === 6,
+    'Expected /sessions compare <count> to parse as a comparison request.'
+  );
+
   const sessionsInvalid = parseSessionsRequest('/sessions 2026-04-08T08-54-23-747Z-l4o0ov');
   assert(
     sessionsInvalid.kind === 'invalid',

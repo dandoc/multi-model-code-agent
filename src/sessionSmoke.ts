@@ -7,6 +7,7 @@ import {
   createSessionStore,
   loadSessionConversation,
   listRecentSessions,
+  renderSessionComparison,
   renderSessionHistory,
   renderSessionList,
   resolveSessionEntry,
@@ -238,6 +239,22 @@ async function main(): Promise<void> {
     if (filteredSessionList.includes(store.sessionId)) {
       throw new Error('Filtered session list should not include non-matching sessions.');
     }
+
+    const comparison = await renderSessionComparison(5, store.sessionId);
+    assertIncludesAll(
+      comparison,
+      [
+        'Recent session comparison (2)',
+        `- id: ${store.sessionId} (current)`,
+        '  title: Summarize this project.',
+        '  activity: user=1, assistant=1, commands=1, config=1, total=4',
+        '  profile: mixed',
+        `- id: ${previousStore.sessionId}`,
+        '  title: Show me the earlier session.',
+        '  activity: user=1, assistant=1, commands=0, config=0, total=2',
+      ],
+      'session comparison'
+    );
 
     const recentSessions = await listRecentSessions(10);
     if (recentSessions.length !== 2) {

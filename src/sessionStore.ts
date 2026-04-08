@@ -103,6 +103,15 @@ type SessionListOptions = {
   query?: string;
 };
 
+type SessionActivitySummary = {
+  userMessages: number;
+  assistantMessages: number;
+  commands: number;
+  configChanges: number;
+  totalEvents: number;
+  profile: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -500,6 +509,54 @@ function matchesSessionSearch(entry: SessionListEntry, query: string): boolean {
   return haystack.includes(normalizedQuery);
 }
 
+function summarizeSessionActivity(events: SessionEvent[]): SessionActivitySummary {
+  let userMessages = 0;
+  let assistantMessages = 0;
+  let commands = 0;
+  let configChanges = 0;
+
+  for (const event of events) {
+    if (event.type === 'message') {
+      if (event.role === 'user') {
+        userMessages += 1;
+      } else if (event.role === 'assistant') {
+        assistantMessages += 1;
+      }
+      continue;
+    }
+
+    if (event.type === 'command') {
+      commands += 1;
+      continue;
+    }
+
+    if (event.type === 'config') {
+      configChanges += 1;
+    }
+  }
+
+  const totalEvents = userMessages + assistantMessages + commands + configChanges;
+  let profile = 'light';
+  if (commands >= Math.max(2, userMessages + assistantMessages) && commands > 0) {
+    profile = 'command-heavy';
+  } else if (configChanges >= 2 && userMessages + assistantMessages <= 4) {
+    profile = 'setup-heavy';
+  } else if (userMessages + assistantMessages >= 6 && commands <= 2) {
+    profile = 'chat-heavy';
+  } else if (userMessages + assistantMessages >= 2 && commands >= 1) {
+    profile = 'mixed';
+  }
+
+  return {
+    userMessages,
+    assistantMessages,
+    commands,
+    configChanges,
+    totalEvents,
+    profile,
+  };
+}
+
 export async function listRecentSessions(limit = 8): Promise<SessionListEntry[]> {
   return (await scanRecentSessions(limit)).entries;
 }
@@ -602,6 +659,46 @@ export async function renderSessionList(limit = 8, options: SessionListOptions =
     lines.push(
       `  provider=${entry.provider}, model=${entry.model || '(provider default)'}, workdir=${entry.workdir}, reason=${entry.reason}`
     );
+    lines.push('');
+  }
+
+  return lines.join('\n').trimEnd();
+}
+
+export async function renderSessionComparison(
+  limit = 5,
+  currentSessionId?: string
+): Promise<string> {
+  const sessionsDir = getSessionsDir();
+  const scan = await scanRecentSessions(limit);
+  const entries = scan.entries;
+
+  if (entries.length === 0) {
+    const warning = renderScanWarning(scan, 'saved sessions');
+    return [warning, `No saved sessions found under ${sessionsDir}`].filter(Boolean).join('\n');
+  }
+
+  const lines = [`Recent session comparison (${entries.length})`, `Root: ${sessionsDir}`, 'Latest first:'];
+  const warning = renderScanWarning(scan, 'saved sessions');
+  if (warning) {
+    lines.push(warning);
+  }
+
+  for (const entry of entries) {
+    const loaded = await loadSessionEvents(entry.sessionPath);
+    const summary = summarizeSessionActivity(loaded.events);
+    const currentLabel = entry.sessionId === currentSessionId ? ' (current)' : '';
+
+    lines.push(`- id: ${entry.sessionId}${currentLabel}`);
+    lines.push(`  title: ${entry.title}`);
+    lines.push(`  last active: ${formatSessionTimestamp(entry.lastActivityAt)}`);
+    lines.push(
+      `  provider=${entry.provider}, model=${entry.model || '(provider default)'}, reason=${entry.reason}`
+    );
+    lines.push(
+      `  activity: user=${summary.userMessages}, assistant=${summary.assistantMessages}, commands=${summary.commands}, config=${summary.configChanges}, total=${summary.totalEvents}`
+    );
+    lines.push(`  profile: ${summary.profile}`);
     lines.push('');
   }
 

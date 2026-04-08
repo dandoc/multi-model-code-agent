@@ -506,3 +506,18 @@ Validation:
 - `npm run build`
 - `npm run smoke:sessions`
 - `npm run smoke:repl`
+
+### 2026-04-08 - Session comparison view
+
+Summary:
+
+- added `/sessions compare [count]` so recent sessions can be compared without opening them one by one
+- each comparison row now shows message, command, and config-change counts plus a lightweight activity profile such as `mixed`, `command-heavy`, or `chat-heavy`
+- expanded the session smoke coverage so comparison output stays grounded in real saved events
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:sessions`
+- `npm run smoke:repl`
