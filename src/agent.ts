@@ -102,6 +102,11 @@ export class AgentRunner {
     this.bootstrapResults.clear();
   }
 
+  replaceHistory(messages: ChatMessage[]): void {
+    this.history = [...messages];
+    this.bootstrapResults.clear();
+  }
+
   private buildMessages(): ChatMessage[] {
     return [
       {

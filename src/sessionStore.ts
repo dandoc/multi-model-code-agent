@@ -3,7 +3,7 @@ import { appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promise
 import os from 'node:os';
 import path from 'node:path';
 
-import type { AgentConfig, ChatRole } from './types.js';
+import type { AgentConfig, ChatMessage, ChatRole } from './types.js';
 
 type SessionConfigSnapshot = {
   provider: AgentConfig['provider'];
@@ -63,6 +63,18 @@ export type SessionListEntry = {
 
 export type SessionResolution = {
   entry: SessionListEntry | null;
+  warning?: string;
+};
+
+export type SessionConversationLoad = {
+  sessionId: string;
+  startedAt?: string;
+  workdir?: string;
+  provider?: AgentConfig['provider'];
+  model?: string;
+  reason?: string;
+  messages: ChatMessage[];
+  totalMessages: number;
   warning?: string;
 };
 
@@ -575,4 +587,70 @@ export async function renderSessionHistory(sessionPath: string, limit = 12): Pro
   }
 
   return lines.join('\n');
+}
+
+export async function loadSessionConversation(
+  sessionPath: string,
+  limit = 24
+): Promise<SessionConversationLoad> {
+  if (!existsSync(sessionPath)) {
+    throw new Error(`Session file not found: ${sessionPath}`);
+  }
+
+  const loaded = await loadSessionEvents(sessionPath);
+  if (loaded.readError) {
+    throw new Error(`Session log could not be read: ${loaded.readError}`);
+  }
+
+  const startedEvent = loaded.events.find((event) => event.type === 'session_started');
+  const messageEvents = loaded.events.filter(
+    (event): event is Extract<SessionEvent, { type: 'message' }> => event.type === 'message'
+  );
+  const messages = messageEvents
+    .slice(-Math.max(1, limit))
+    .map((event) => ({
+      role: event.role,
+      content: event.content,
+    }));
+
+  const warningParts: string[] = [];
+  if (loaded.malformedLineCount > 0) {
+    warningParts.push(formatMalformedLineWarning(loaded.malformedLineCount));
+  }
+  if (!startedEvent) {
+    warningParts.push('session start metadata is missing or unreadable');
+  }
+
+  return {
+    sessionId:
+      startedEvent && startedEvent.type === 'session_started'
+        ? startedEvent.sessionId
+        : path.basename(sessionPath, '.jsonl'),
+    startedAt:
+      startedEvent && startedEvent.type === 'session_started'
+        ? startedEvent.timestamp
+        : undefined,
+    workdir:
+      startedEvent && startedEvent.type === 'session_started'
+        ? startedEvent.config.workdir
+        : undefined,
+    provider:
+      startedEvent && startedEvent.type === 'session_started'
+        ? startedEvent.config.provider
+        : undefined,
+    model:
+      startedEvent && startedEvent.type === 'session_started'
+        ? startedEvent.config.model
+        : undefined,
+    reason:
+      startedEvent && startedEvent.type === 'session_started'
+        ? startedEvent.reason
+        : undefined,
+    messages,
+    totalMessages: messageEvents.length,
+    warning:
+      warningParts.length > 0
+        ? `Warning: ${warningParts.join(' and ')} while resuming this session.`
+        : undefined,
+  };
 }

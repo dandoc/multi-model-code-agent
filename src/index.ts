@@ -22,6 +22,7 @@ import {
 } from './providerModels.js';
 import {
   createSessionStore,
+  loadSessionConversation,
   renderSessionHistory,
   renderSessionList,
   resolveSessionEntry,
@@ -65,6 +66,9 @@ function printReplHelp(): void {
       '  /history [count]      Show recent events from the current saved session',
       '  /history latest [count] or /history <session-id> [count]',
       '                       Show events from an earlier saved session',
+      '  /resume [count]       Resume the latest earlier session into the current conversation',
+      '  /resume latest [count] or /resume <session-id> [count]',
+      '                       Replace the current conversation with saved user/assistant messages',
       '  /sessions [count]     Show recent saved sessions',
       '  /tools                Show tool catalog',
       '  /reset                Clear conversation history',
@@ -173,6 +177,32 @@ function parseHistoryRequest(entry: string): { sessionRef?: string; count: numbe
   return {
     sessionRef: args[0],
     count: parsePositiveCount(args[1], 12),
+  };
+}
+
+function parseResumeRequest(entry: string): { sessionRef?: string; count: number } {
+  const args = entry
+    .slice('/resume'.length)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (args.length === 0) {
+    return { sessionRef: 'latest', count: 24 };
+  }
+
+  if (args.length === 1) {
+    const maybeCount = Number.parseInt(args[0], 10);
+    if (Number.isFinite(maybeCount) && maybeCount > 0) {
+      return { sessionRef: 'latest', count: parsePositiveCount(args[0], 24, 100) };
+    }
+
+    return { sessionRef: args[0], count: 24 };
+  }
+
+  return {
+    sessionRef: args[0],
+    count: parsePositiveCount(args[1], 24, 100),
   };
 }
 
@@ -322,6 +352,72 @@ async function main(): Promise<void> {
 
           const history = await renderSessionHistory(resolution.entry.sessionPath, request.count);
           console.log(`\n${[resolution.warning, history].filter(Boolean).join('\n')}`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.log(`\n${message}`);
+        }
+        continue;
+      }
+
+      if (entry === '/resume' || entry.startsWith('/resume ')) {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
+        const request = parseResumeRequest(entry);
+
+        try {
+          const resolution = await resolveSessionEntry(request.sessionRef ?? 'latest', sessionStore.sessionId);
+          if (!resolution.entry) {
+            console.log(
+              `\nCould not find a saved session for "${request.sessionRef ?? 'latest'}". Use /sessions to inspect recent ids.`
+            );
+            continue;
+          }
+
+          if (resolution.entry.sessionId === sessionStore.sessionId) {
+            console.log('\nThe requested session is already the current session.');
+            continue;
+          }
+
+          const loadedConversation = await loadSessionConversation(
+            resolution.entry.sessionPath,
+            request.count
+          );
+
+          if (loadedConversation.messages.length === 0) {
+            console.log(
+              `\n${[
+                loadedConversation.warning,
+                `Session ${loadedConversation.sessionId} has no saved user/assistant messages to resume.`,
+              ]
+                .filter(Boolean)
+                .join('\n')}`
+            );
+            continue;
+          }
+
+          agent.replaceHistory(loadedConversation.messages);
+
+          const sourceSummary = `source: provider=${
+            loadedConversation.provider ?? resolution.entry.provider
+          }, model=${
+            loadedConversation.model || resolution.entry.model || '(provider default)'
+          }, workdir=${loadedConversation.workdir ?? resolution.entry.workdir}`;
+          const currentSummary = `current runtime: provider=${config.provider}, model=${
+            config.model || '(provider default)'
+          }, workdir=${config.workdir}`;
+          const resumeMessage = [
+            loadedConversation.warning,
+            `Resumed ${loadedConversation.messages.length} message${
+              loadedConversation.messages.length === 1 ? '' : 's'
+            } from session ${loadedConversation.sessionId}.`,
+            `Total saved messages in that session: ${loadedConversation.totalMessages}.`,
+            sourceSummary,
+            currentSummary,
+          ]
+            .filter(Boolean)
+            .join('\n');
+
+          console.log(`\n${resumeMessage}`);
+          await logSessionEvent(() => sessionStore.logMessage('assistant', resumeMessage));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           console.log(`\n${message}`);

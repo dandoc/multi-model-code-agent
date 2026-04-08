@@ -447,3 +447,18 @@ Validation:
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke:run-files`
+
+### 2026-04-08 - Session resume
+
+Summary:
+
+- added `/resume`, `/resume latest`, and `/resume <session-id>` so a saved session's user/assistant messages can be loaded back into the current conversation
+- kept runtime settings explicit: resume restores conversation context only, while the current provider, model, and workdir stay unchanged
+- surfaced resume warnings for malformed session logs and empty sessions instead of failing silently
+- expanded the session smoke coverage to lock in session-conversation loading and `/resume`-style behavior
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:sessions`

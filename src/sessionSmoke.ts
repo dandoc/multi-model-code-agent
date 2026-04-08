@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import {
   createSessionStore,
+  loadSessionConversation,
   listRecentSessions,
   renderSessionHistory,
   renderSessionList,
@@ -173,6 +174,21 @@ async function main(): Promise<void> {
       throw new Error('Rendered history leaked the API key.');
     }
 
+    const currentConversation = await loadSessionConversation(store.sessionPath, 10);
+    if (currentConversation.messages.length !== 2) {
+      throw new Error(
+        `Expected 2 resumed messages from the current session, got ${currentConversation.messages.length}.`
+      );
+    }
+    if (
+      currentConversation.warning !==
+      'Warning: ignored 2 malformed JSONL lines while resuming this session.'
+    ) {
+      throw new Error(
+        `Unexpected current-session resume warning: ${currentConversation.warning ?? '(missing)'}`
+      );
+    }
+
     await writeFile(
       corruptedSessionPath,
       '{"type":"session_started","timestamp":"2026-04-08T00:00:00.000Z"',
@@ -237,6 +253,25 @@ async function main(): Promise<void> {
       ],
       'previous session history'
     );
+
+    const resumedConversation = await loadSessionConversation(previousStore.sessionPath, 10);
+    if (resumedConversation.messages.length !== 2) {
+      throw new Error(
+        `Expected 2 resumed messages, got ${resumedConversation.messages.length}.`
+      );
+    }
+    if (resumedConversation.messages[0]?.role !== 'user') {
+      throw new Error('The first resumed message should be the earlier user message.');
+    }
+    if (!resumedConversation.messages[0]?.content.includes('Show me the earlier session.')) {
+      throw new Error('The resumed conversation is missing the earlier user message.');
+    }
+    if (resumedConversation.messages[1]?.role !== 'assistant') {
+      throw new Error('The second resumed message should be the earlier assistant reply.');
+    }
+    if (!resumedConversation.messages[1]?.content.includes('This is the earlier session reply.')) {
+      throw new Error('The resumed conversation is missing the earlier assistant reply.');
+    }
 
     const bulkRoot = path.join(tempRoot, 'bulk-home');
     const bulkSessionsDir = path.join(bulkRoot, 'sessions');
