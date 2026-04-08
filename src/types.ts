@@ -27,6 +27,7 @@ export type ToolName =
   | 'read_multiple_files'
   | 'search_files'
   | 'write_patch'
+  | 'run_files'
   | 'run_shell';
 
 export interface ToolExecutionResult {

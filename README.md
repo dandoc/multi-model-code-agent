@@ -7,7 +7,7 @@ Current goals:
 - Use local models through `Ollama`
 - Use remote models through any `OpenAI-compatible` chat-completions API
 - Use `Codex CLI` through a local ChatGPT login, without managing an API key in this project
-- Let the model call nine core coding tools:
+- Let the model call ten core coding tools:
   - `summarize_project`
   - `find_entrypoint`
   - `summarize_config`
@@ -16,6 +16,7 @@ Current goals:
   - `read_multiple_files`
   - `search_files`
   - `write_patch`
+  - `run_files`
   - `run_shell`
 - Keep dangerous actions behind human approval by default
 
@@ -257,6 +258,37 @@ If you already know a command is PowerShell-specific, setting `shell: "powershel
   "command": "$cmd = Get-Command pyw, pythonw, py, python -ErrorAction SilentlyContinue | Select-Object -First 1; if (-not $cmd) { throw 'Python launcher not found' }; Start-Process $cmd.Source -ArgumentList 'test\\hello.py'",
   "timeoutMs": 10000,
   "shell": "powershell"
+}
+```
+
+## Running existing files
+
+If the user asks to run or launch existing example/source files, the agent can now use `run_files` instead of building a large ad-hoc shell script.
+
+Supported file types:
+
+- JavaScript: `.js`, `.mjs`, `.cjs`
+- Python: `.py`
+- C: `.c`
+- C++: `.cpp`, `.cc`, `.cxx`
+- Rust: `.rs`
+- Java: `.java`
+- HTML: `.html`, `.htm`
+
+Typical patterns:
+
+```json
+{ "paths": ["test/hello.js", "test/hello.py"], "timeoutMs": 30000 }
+```
+
+```json
+{
+  "directory": "test",
+  "nameContains": "hello",
+  "extensions": [".js", ".py", ".c", ".cpp", ".rs", ".java", ".html"],
+  "recursive": true,
+  "maxFiles": 12,
+  "timeoutMs": 30000
 }
 ```
 

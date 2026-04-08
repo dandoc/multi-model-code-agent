@@ -323,6 +323,41 @@ export class AgentRunner {
       ].join('\n');
     }
 
+    if (tool.name === 'run_files') {
+      const timeoutMs = typeof args.timeoutMs === 'number' ? args.timeoutMs : 30_000;
+      const paths = Array.isArray(args.paths)
+        ? args.paths.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        : [];
+      const extensions = Array.isArray(args.extensions)
+        ? args.extensions.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        : [];
+      const lines = [
+        `Approve run_files in ${this.config.workdir}?`,
+        `Timeout per file: ${timeoutMs}ms`,
+      ];
+
+      if (paths.length > 0) {
+        lines.push(`Paths: ${paths.join(', ')}`);
+      } else {
+        const directory =
+          typeof args.directory === 'string' && args.directory.trim().length > 0
+            ? args.directory.trim()
+            : '.';
+        lines.push(`Directory: ${directory}`);
+        if (typeof args.nameContains === 'string' && args.nameContains.trim().length > 0) {
+          lines.push(`Name contains: ${args.nameContains.trim()}`);
+        }
+        if (extensions.length > 0) {
+          lines.push(`Extensions: ${extensions.join(', ')}`);
+        }
+        lines.push(
+          `Recursive: ${typeof args.recursive === 'boolean' ? String(args.recursive) : 'true'}`
+        );
+      }
+
+      return lines.join('\n');
+    }
+
     return `Approve ${tool.name} with arguments ${JSON.stringify(args)}?`;
   }
 

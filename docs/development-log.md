@@ -432,3 +432,18 @@ Validation:
 
 - `npm run typecheck`
 - `npm run build`
+
+### 2026-04-08 - Fast run_files execution tool
+
+Summary:
+
+- added a new `run_files` tool so the agent can run or launch existing example files directly instead of composing large one-off shell scripts
+- built in handlers for JavaScript, Python, C, C++, Rust, Java, and HTML, including Windows-friendly Python GUI launching and default-app HTML opening
+- added a shorter approval view for `run_files` and updated the prompt so execution requests prefer this tool over verbose shell commands
+- added `npm run smoke:run-files` and folded it into the default smoke flow
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:run-files`

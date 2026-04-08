@@ -39,6 +39,7 @@ export function buildSystemPrompt(config: AgentConfig, tools: ToolDefinition[]):
     '- Never pretend you already read a file unless a real tool result was provided in the conversation.',
     '- Use write_patch for file changes.',
     '- Do not claim that files were created or updated unless you already received a successful write_patch tool result for that work.',
+    '- If the user asks to execute or launch existing source/example files with common extensions, prefer `run_files` before building a long shell script.',
     '- Use run_shell only when it is clearly helpful.',
     '- On Windows, the default run_shell environment behaves like cmd. If you need PowerShell-specific commands such as Start-Process, Get-ChildItem, or Set-ExecutionPolicy, set `shell` to `powershell` in the run_shell arguments.',
     '- On Windows, choose a shell that matches the command syntax. Common PowerShell commands can be retried automatically in PowerShell if a default/cmd attempt fails.',

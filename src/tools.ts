@@ -1,6 +1,7 @@
 import { exec as execCallback, execFile as execFileCallback } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -23,6 +24,20 @@ const exec = promisify(execCallback);
 const execFile = promisify(execFileCallback);
 
 type RunShellMode = 'default' | 'cmd' | 'powershell';
+
+type RunFilesAction = 'run' | 'launch' | 'compile';
+
+type RunFilesResult = {
+  path: string;
+  ok: boolean;
+  action: RunFilesAction;
+  runtime: string;
+  reason?: string;
+  exitCode?: number | string | null;
+  stdout?: string;
+  stderr?: string;
+  launched?: boolean;
+};
 
 type ShellExecutionError = {
   stdout?: string;
@@ -259,6 +274,182 @@ function renderShellFailure(
     `${prefix ? `${prefix} ` : ''}STDOUT:\n${shellError.stdout || '(empty)'}`,
     `${prefix ? `${prefix} ` : ''}STDERR:\n${shellError.stderr || '(empty)'}`,
   ].join('\n\n');
+}
+
+type ExecCaptureResult = {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  code: number | string | null;
+  message?: string;
+};
+
+async function resolveCommandPath(candidates: string[]): Promise<string | null> {
+  const resolver = process.platform === 'win32' ? 'where.exe' : 'which';
+  for (const candidate of candidates) {
+    try {
+      const { stdout } = await execFile(resolver, [candidate], {
+        timeout: 10_000,
+        windowsHide: true,
+      });
+      const resolved = stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find(Boolean);
+      if (resolved) {
+        return resolved;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+async function execFileCapture(
+  executable: string,
+  args: string[],
+  cwd: string,
+  timeoutMs: number
+): Promise<ExecCaptureResult> {
+  try {
+    const { stdout, stderr } = await execFile(executable, args, {
+      cwd,
+      timeout: timeoutMs,
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    });
+
+    return {
+      ok: true,
+      stdout,
+      stderr,
+      code: 0,
+    };
+  } catch (error) {
+    const shellError = normalizeShellError(error);
+    return {
+      ok: false,
+      stdout: shellError.stdout || '',
+      stderr: shellError.stderr || '',
+      code: shellError.code ?? null,
+      message: shellError.message,
+    };
+  }
+}
+
+function truncateOutput(text: string, maxChars = 4_000): string {
+  const normalized = text.trim();
+  if (!normalized) {
+    return '';
+  }
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxChars)}\n[truncated ${normalized.length - maxChars} chars]`;
+}
+
+function buildRunFilesSection(title: string, content: string): string {
+  return `${title}:\n${content || '(empty)'}`;
+}
+
+function normalizeRunFilesPath(workdir: string, absolutePath: string): string {
+  return normalizeDisplayPath(relativeToRoot(workdir, absolutePath));
+}
+
+function detectPythonGuiScript(content: string): boolean {
+  return /\btkinter\b|\bmainloop\s*\(|\bPyQt\b|\bPySide\b|\bwx\./i.test(content);
+}
+
+async function launchDetachedProcess(
+  executable: string,
+  args: string[],
+  cwd: string
+): Promise<ExecCaptureResult> {
+  if (process.platform === 'win32') {
+    const argumentList = args.map((value) => escapePowerShellString(value)).join(', ');
+    const command = [
+      `Start-Process -FilePath ${escapePowerShellString(executable)}`,
+      argumentList ? `-ArgumentList ${argumentList}` : '',
+      `-WorkingDirectory ${escapePowerShellString(cwd)}`,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    try {
+      await executeShellCommand(command, 'powershell', cwd, 30_000);
+      return {
+        ok: true,
+        stdout: '',
+        stderr: '',
+        code: 0,
+      };
+    } catch (error) {
+      const shellError = normalizeShellError(error);
+      return {
+        ok: false,
+        stdout: shellError.stdout || '',
+        stderr: shellError.stderr || '',
+        code: shellError.code ?? null,
+        message: shellError.message,
+      };
+    }
+  }
+
+  const opener = process.platform === 'darwin' ? 'open' : 'xdg-open';
+  return execFileCapture(opener, [executable], cwd, 30_000);
+}
+
+async function launchDefaultApp(targetPath: string, cwd: string): Promise<ExecCaptureResult> {
+  if (process.platform === 'win32') {
+    try {
+      await executeShellCommand(
+        `Start-Process -FilePath ${escapePowerShellString(targetPath)}`,
+        'powershell',
+        cwd,
+        30_000
+      );
+      return {
+        ok: true,
+        stdout: '',
+        stderr: '',
+        code: 0,
+      };
+    } catch (error) {
+      const shellError = normalizeShellError(error);
+      return {
+        ok: false,
+        stdout: shellError.stdout || '',
+        stderr: shellError.stderr || '',
+        code: shellError.code ?? null,
+        message: shellError.message,
+      };
+    }
+  }
+
+  const opener = process.platform === 'darwin' ? 'open' : 'xdg-open';
+  return execFileCapture(opener, [targetPath], cwd, 30_000);
+}
+
+function renderRunFilesResult(results: RunFilesResult[]): string {
+  return results
+    .map((result) =>
+      [
+        `PATH: ${result.path}`,
+        `STATUS: ${result.ok ? 'ok' : 'failed'}`,
+        `ACTION: ${result.action}`,
+        `RUNTIME: ${result.runtime}`,
+        result.reason ? `REASON: ${result.reason}` : '',
+        result.exitCode !== undefined ? `EXIT CODE: ${String(result.exitCode)}` : '',
+        result.launched ? 'LAUNCHED: true' : '',
+        buildRunFilesSection('STDOUT', truncateOutput(result.stdout || '')),
+        buildRunFilesSection('STDERR', truncateOutput(result.stderr || '')),
+      ]
+        .filter(Boolean)
+        .join('\n')
+    )
+    .join('\n\n');
 }
 
 async function executeShellCommand(
@@ -909,6 +1100,370 @@ async function runSearchFiles(args: Record<string, unknown>, context: ToolContex
   };
 }
 
+async function collectRunFilesTargets(
+  args: Record<string, unknown>,
+  context: ToolContext
+): Promise<string[]> {
+  const explicitPaths = getStringArray(args, 'paths');
+  if (explicitPaths.length > 0) {
+    return explicitPaths.map((requestedPath) =>
+      normalizeRunFilesPath(
+        context.config.workdir,
+        resolvePathInsideRoot(context.config.workdir, requestedPath)
+      )
+    );
+  }
+
+  const directoryInput = getString(args, 'directory') || '.';
+  const directoryPath = resolvePathInsideRoot(context.config.workdir, directoryInput);
+  const recursive = getBoolean(args, 'recursive', true);
+  const nameContains = getString(args, 'nameContains').toLowerCase();
+  const extensions = getStringArray(args, 'extensions').map((value) => value.toLowerCase());
+  const maxFiles = Math.max(1, Math.min(20, Math.floor(getNumber(args, 'maxFiles', 8))));
+
+  let candidates: string[];
+  if (recursive) {
+    candidates = await walkFiles(directoryPath);
+  } else {
+    const entries = await readdir(directoryPath, { withFileTypes: true });
+    candidates = entries
+      .filter((entry) => entry.isFile())
+      .map((entry) => path.join(directoryPath, entry.name));
+  }
+
+  const filtered = candidates
+    .filter((candidatePath) => {
+      const fileName = path.basename(candidatePath).toLowerCase();
+      if (nameContains && !fileName.includes(nameContains)) {
+        return false;
+      }
+      if (extensions.length > 0 && !extensions.includes(path.extname(candidatePath).toLowerCase())) {
+        return false;
+      }
+      return true;
+    })
+    .slice(0, maxFiles)
+    .map((candidatePath) => normalizeRunFilesPath(context.config.workdir, candidatePath));
+
+  return [...new Set(filtered)];
+}
+
+async function runNodeStyleFile(
+  absolutePath: string,
+  timeoutMs: number,
+  candidates: string[]
+): Promise<RunFilesResult> {
+  const runtime = await resolveCommandPath(candidates);
+  if (!runtime) {
+    return {
+      path: absolutePath,
+      ok: false,
+      action: 'run',
+      runtime: candidates.join(', '),
+      reason: `runtime not found: ${candidates.join(', ')}`,
+    };
+  }
+
+  const result = await execFileCapture(runtime, [absolutePath], path.dirname(absolutePath), timeoutMs);
+  return {
+    path: absolutePath,
+    ok: result.ok,
+    action: 'run',
+    runtime: path.basename(runtime),
+    reason: result.ok ? undefined : result.message || 'Program exited with non-zero status',
+    exitCode: result.code,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
+}
+
+async function runPythonFile(
+  absolutePath: string,
+  timeoutMs: number
+): Promise<RunFilesResult> {
+  const content = await readFile(absolutePath, 'utf8').catch(() => '');
+  const isGui = detectPythonGuiScript(content);
+  const runtime = await resolveCommandPath(
+    isGui && process.platform === 'win32'
+      ? ['pyw', 'pythonw', 'py', 'python']
+      : ['py', 'python', 'python3']
+  );
+
+  if (!runtime) {
+    return {
+      path: absolutePath,
+      ok: false,
+      action: isGui ? 'launch' : 'run',
+      runtime: isGui ? 'pyw, pythonw, py, python' : 'py, python, python3',
+      reason: isGui
+        ? 'Python GUI launcher not found: pyw, pythonw, py, python'
+        : 'Python runtime not found: py, python, python3',
+    };
+  }
+
+  if (isGui && process.platform === 'win32') {
+    const launched = await launchDetachedProcess(runtime, [absolutePath], path.dirname(absolutePath));
+    return {
+      path: absolutePath,
+      ok: launched.ok,
+      action: 'launch',
+      runtime: path.basename(runtime),
+      reason: launched.ok ? undefined : launched.message || 'Failed to launch Python GUI script',
+      exitCode: launched.code,
+      stdout: launched.stdout,
+      stderr: launched.stderr,
+      launched: launched.ok,
+    };
+  }
+
+  const result = await execFileCapture(runtime, [absolutePath], path.dirname(absolutePath), timeoutMs);
+  return {
+    path: absolutePath,
+    ok: result.ok,
+    action: 'run',
+    runtime: path.basename(runtime),
+    reason: result.ok ? undefined : result.message || 'Program exited with non-zero status',
+    exitCode: result.code,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
+}
+
+async function compileAndRunFile(
+  absolutePath: string,
+  timeoutMs: number,
+  compilerCandidates: string[],
+  compileArgsFactory: (outputPath: string) => string[],
+  runtimeLabel: string
+): Promise<RunFilesResult> {
+  const compiler = await resolveCommandPath(compilerCandidates);
+  if (!compiler) {
+    return {
+      path: absolutePath,
+      ok: false,
+      action: 'compile',
+      runtime: compilerCandidates.join(', '),
+      reason: `compiler not found: ${compilerCandidates.join(', ')}`,
+    };
+  }
+
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'mmca-run-files-'));
+  const outputPath = path.join(
+    tempRoot,
+    `artifact${process.platform === 'win32' ? '.exe' : ''}`
+  );
+
+  try {
+    const compile = await execFileCapture(
+      compiler,
+      [...compileArgsFactory(outputPath), absolutePath],
+      path.dirname(absolutePath),
+      timeoutMs
+    );
+    if (!compile.ok || !existsSync(outputPath)) {
+      return {
+        path: absolutePath,
+        ok: false,
+        action: 'compile',
+        runtime: path.basename(compiler),
+        reason: 'Compilation failed',
+        exitCode: compile.code,
+        stdout: compile.stdout,
+        stderr: compile.stderr || compile.message || '',
+      };
+    }
+
+    const run = await execFileCapture(outputPath, [], path.dirname(absolutePath), timeoutMs);
+    return {
+      path: absolutePath,
+      ok: run.ok,
+      action: 'run',
+      runtime: runtimeLabel,
+      reason: run.ok ? undefined : run.message || 'Program exited with non-zero status',
+      exitCode: run.code,
+      stdout: run.stdout,
+      stderr: run.stderr,
+    };
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
+async function runJavaFile(absolutePath: string, timeoutMs: number): Promise<RunFilesResult> {
+  const java = await resolveCommandPath(['java']);
+  if (!java) {
+    return {
+      path: absolutePath,
+      ok: false,
+      action: 'run',
+      runtime: 'java',
+      reason: 'java runtime not found',
+    };
+  }
+
+  const javac = await resolveCommandPath(['javac']);
+  if (!javac) {
+    const sourceRun = await execFileCapture(java, [absolutePath], path.dirname(absolutePath), timeoutMs);
+    return {
+      path: absolutePath,
+      ok: sourceRun.ok,
+      action: 'run',
+      runtime: 'java',
+      reason: sourceRun.ok
+        ? undefined
+        : 'javac not found, and direct java source execution failed',
+      exitCode: sourceRun.code,
+      stdout: sourceRun.stdout,
+      stderr: sourceRun.stderr || sourceRun.message || '',
+    };
+  }
+
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'mmca-run-java-'));
+  const className = path.basename(absolutePath, path.extname(absolutePath));
+
+  try {
+    const compile = await execFileCapture(
+      javac,
+      ['-d', tempRoot, absolutePath],
+      path.dirname(absolutePath),
+      timeoutMs
+    );
+    if (!compile.ok) {
+      return {
+        path: absolutePath,
+        ok: false,
+        action: 'compile',
+        runtime: 'javac',
+        reason: 'Compilation failed',
+        exitCode: compile.code,
+        stdout: compile.stdout,
+        stderr: compile.stderr || compile.message || '',
+      };
+    }
+
+    const run = await execFileCapture(java, ['-cp', tempRoot, className], tempRoot, timeoutMs);
+    return {
+      path: absolutePath,
+      ok: run.ok,
+      action: 'run',
+      runtime: 'java',
+      reason: run.ok ? undefined : run.message || 'Program exited with non-zero status',
+      exitCode: run.code,
+      stdout: run.stdout,
+      stderr: run.stderr,
+    };
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
+async function launchHtmlFile(absolutePath: string): Promise<RunFilesResult> {
+  const result = await launchDefaultApp(absolutePath, path.dirname(absolutePath));
+  return {
+    path: absolutePath,
+    ok: result.ok,
+    action: 'launch',
+    runtime: process.platform === 'win32' ? 'default app' : process.platform === 'darwin' ? 'open' : 'xdg-open',
+    reason: result.ok ? undefined : result.message || 'Failed to launch HTML file',
+    exitCode: result.code,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    launched: result.ok,
+  };
+}
+
+async function executeRunFilesTarget(
+  workdir: string,
+  relativePath: string,
+  timeoutMs: number
+): Promise<RunFilesResult> {
+  const absolutePath = resolvePathInsideRoot(workdir, relativePath);
+  const extension = path.extname(absolutePath).toLowerCase();
+
+  switch (extension) {
+    case '.js':
+    case '.mjs':
+    case '.cjs':
+      return {
+        ...(await runNodeStyleFile(absolutePath, timeoutMs, ['node'])),
+        path: normalizeRunFilesPath(workdir, absolutePath),
+      };
+    case '.py':
+      return {
+        ...(await runPythonFile(absolutePath, timeoutMs)),
+        path: normalizeRunFilesPath(workdir, absolutePath),
+      };
+    case '.c':
+      return {
+        ...(await compileAndRunFile(absolutePath, timeoutMs, ['gcc', 'clang'], (outputPath) => ['-o', outputPath], 'native executable')),
+        path: normalizeRunFilesPath(workdir, absolutePath),
+      };
+    case '.cpp':
+    case '.cc':
+    case '.cxx':
+      return {
+        ...(await compileAndRunFile(absolutePath, timeoutMs, ['g++', 'clang++'], (outputPath) => ['-o', outputPath], 'native executable')),
+        path: normalizeRunFilesPath(workdir, absolutePath),
+      };
+    case '.rs':
+      return {
+        ...(await compileAndRunFile(absolutePath, timeoutMs, ['rustc'], (outputPath) => ['-o', outputPath], 'native executable')),
+        path: normalizeRunFilesPath(workdir, absolutePath),
+      };
+    case '.java':
+      return {
+        ...(await runJavaFile(absolutePath, timeoutMs)),
+        path: normalizeRunFilesPath(workdir, absolutePath),
+      };
+    case '.html':
+    case '.htm':
+      return {
+        ...(await launchHtmlFile(absolutePath)),
+        path: normalizeRunFilesPath(workdir, absolutePath),
+      };
+    default:
+      return {
+        path: normalizeRunFilesPath(workdir, absolutePath),
+        ok: false,
+        action: 'run',
+        runtime: extension || '(no extension)',
+        reason: `Unsupported file type: ${extension || '(no extension)'}`,
+      };
+  }
+}
+
+async function runFiles(args: Record<string, unknown>, context: ToolContext): Promise<ToolExecutionResult> {
+  const timeoutMs = Math.max(1_000, Math.min(120_000, Math.floor(getNumber(args, 'timeoutMs', 30_000))));
+  const targets = await collectRunFilesTargets(args, context);
+
+  if (targets.length === 0) {
+    throw new Error('No matching files were found to run.');
+  }
+
+  const results: RunFilesResult[] = [];
+  for (const target of targets) {
+    results.push(await executeRunFilesTarget(context.config.workdir, target, timeoutMs));
+  }
+
+  const successCount = results.filter((result) => result.ok).length;
+  const failureCount = results.length - successCount;
+
+  return {
+    ok: failureCount === 0,
+    summary:
+      failureCount === 0
+        ? `Ran or launched ${successCount} file${successCount === 1 ? '' : 's'} successfully.`
+        : `Ran ${results.length} file${results.length === 1 ? '' : 's'} with ${failureCount} failure${failureCount === 1 ? '' : 's'}.`,
+    output: renderRunFilesResult(results),
+    metadata: {
+      paths: results.map((result) => result.path),
+      successCount,
+      failureCount,
+      timeoutMs,
+    },
+  };
+}
+
 async function runWritePatch(args: Record<string, unknown>, context: ToolContext): Promise<ToolExecutionResult> {
   try {
     const plan = await planWritePatch(context.config.workdir, args);
@@ -1222,6 +1777,15 @@ export function createTools(): ToolDefinition[] {
         '{ "operation": "replace", "path": "README.md", "find": "old", "replace": "new", "replaceAll": false } or { "operation": "create", "path": "notes.txt", "content": "hello", "overwrite": false } or { "edits": [{ "operation": "replace", "path": "README.md", "find": "old", "replace": "new" }, { "operation": "create", "path": "notes.txt", "content": "hello" }], "rollbackOnFailure": true }',
       requiresApproval: true,
       run: runWritePatch,
+    },
+    {
+      name: 'run_files',
+      description:
+        'Run or launch existing files with built-in handlers for JavaScript, Python, C, C++, Rust, Java, and HTML.',
+      inputShape:
+        '{ "paths": ["test/hello.js", "test/hello.py"], "timeoutMs": 30000 } or { "directory": "test", "nameContains": "hello", "extensions": [".js", ".py", ".c", ".cpp", ".rs", ".java", ".html"], "recursive": true, "maxFiles": 12, "timeoutMs": 30000 }',
+      requiresApproval: true,
+      run: runFiles,
     },
     {
       name: 'run_shell',

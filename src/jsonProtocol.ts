@@ -71,6 +71,7 @@ function isToolName(value: unknown): value is ToolName {
     value === 'read_multiple_files' ||
     value === 'search_files' ||
     value === 'write_patch' ||
+    value === 'run_files' ||
     value === 'run_shell'
   );
 }
