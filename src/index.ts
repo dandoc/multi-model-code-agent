@@ -27,6 +27,13 @@ import {
   renderSessionList,
   resolveSessionEntry,
 } from './sessionStore.js';
+import {
+  normalizeReplCommandAlias,
+  parseHistoryRequest,
+  parsePositiveCount,
+  parseResumeRequest,
+  isWholeNumberText,
+} from './replCommands.js';
 import { createTools, renderToolCatalog } from './tools.js';
 
 import type { AgentConfig, ModelProvider } from './types.js';
@@ -70,6 +77,7 @@ function printReplHelp(): void {
       '  /resume latest [count] or /resume <session-id> [count]',
       '                       Replace the current conversation with saved user/assistant messages',
       '  /sessions [count]     Show recent saved sessions',
+      '  /session [count]      Alias for /sessions',
       '  /tools                Show tool catalog',
       '  /reset                Clear conversation history',
       '  /provider <name>      Switch provider (ollama, openai, codex) and save it to .env',
@@ -143,67 +151,6 @@ function ensureProviderReady(config: AgentConfig): void {
       `The model \`${config.model}\` is not compatible with provider \`${config.provider}\`. Use /models to inspect choices or /model default to reset.`
     );
   }
-}
-
-function parsePositiveCount(value: string | undefined, fallback: number, max = 50): number {
-  const parsed = Number.parseInt(value ?? '', 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return fallback;
-  }
-
-  return Math.max(1, Math.min(max, parsed));
-}
-
-function parseHistoryRequest(entry: string): { sessionRef?: string; count: number } {
-  const args = entry
-    .slice('/history'.length)
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (args.length === 0) {
-    return { count: 12 };
-  }
-
-  if (args.length === 1) {
-    const maybeCount = Number.parseInt(args[0], 10);
-    if (Number.isFinite(maybeCount) && maybeCount > 0) {
-      return { count: parsePositiveCount(args[0], 12) };
-    }
-
-    return { sessionRef: args[0], count: 12 };
-  }
-
-  return {
-    sessionRef: args[0],
-    count: parsePositiveCount(args[1], 12),
-  };
-}
-
-function parseResumeRequest(entry: string): { sessionRef?: string; count: number } {
-  const args = entry
-    .slice('/resume'.length)
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (args.length === 0) {
-    return { sessionRef: 'latest', count: 24 };
-  }
-
-  if (args.length === 1) {
-    const maybeCount = Number.parseInt(args[0], 10);
-    if (Number.isFinite(maybeCount) && maybeCount > 0) {
-      return { sessionRef: 'latest', count: parsePositiveCount(args[0], 24, 100) };
-    }
-
-    return { sessionRef: args[0], count: 24 };
-  }
-
-  return {
-    sessionRef: args[0],
-    count: parsePositiveCount(args[1], 24, 100),
-  };
 }
 
 async function main(): Promise<void> {
@@ -306,7 +253,7 @@ async function main(): Promise<void> {
     console.log(renderConfigSummary(config));
 
     while (true) {
-      const entry = (await rl.question('\n> ')).trim();
+      const entry = normalizeReplCommandAlias((await rl.question('\n> ')).trim());
       if (!entry) {
         continue;
       }
@@ -428,6 +375,12 @@ async function main(): Promise<void> {
       if (entry === '/sessions' || entry.startsWith('/sessions ')) {
         await logSessionEvent(() => sessionStore.logCommand(entry));
         const requestedCount = entry === '/sessions' ? undefined : entry.slice('/sessions '.length).trim();
+        if (requestedCount && !isWholeNumberText(requestedCount)) {
+          console.log(
+            '\n/sessions only accepts an optional count. Use /history <session-id> to inspect a session or /resume <session-id> to continue from it.'
+          );
+          continue;
+        }
         const count = parsePositiveCount(requestedCount, 8, 30);
         console.log(`\n${await renderSessionList(count, sessionStore.sessionId)}`);
         continue;

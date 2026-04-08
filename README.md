@@ -113,6 +113,7 @@ npm run dev
 - `/resume latest [count]`
 - `/resume <session-id> [count]`
 - `/sessions [count]`
+- `/session [count]`
 - `/tools`
 - `/reset`
 - `/provider ollama|openai|codex` persists to `.env`
@@ -159,6 +160,7 @@ Each REPL session now writes a small JSONL log so you can inspect recent activit
 - override location: set `MM_AGENT_HOME`
 - sensitive values such as `/api-key ...` are redacted before they are written
 - use `/sessions` to list recent saved session ids
+- `/session` is a short alias for `/sessions`
 - use `/history latest` to inspect the most recent earlier session
 - use `/history <session-id>` to open a specific saved session by full or unique prefix id
 - use `/resume latest` to replace the current conversation with messages from the most recent earlier session

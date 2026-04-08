@@ -462,3 +462,18 @@ Validation:
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke:sessions`
+
+### 2026-04-08 - REPL session command parsing fixes
+
+Summary:
+
+- fixed `/history <session-id>` and `/resume <session-id>` so session ids that start with a year are no longer misread as counts
+- made `/sessions <session-id>` show a direct usage hint instead of silently treating the id prefix as a numeric limit
+- added `/session` as a small alias for `/sessions`
+- added `npm run smoke:repl` and folded it into the default smoke flow to lock in the parsing behavior
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:repl`
