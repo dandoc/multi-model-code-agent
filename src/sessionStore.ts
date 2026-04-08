@@ -567,9 +567,10 @@ export async function renderSessionList(limit = 8, currentSessionId?: string): P
     lines.push(
       `  provider=${entry.provider}, model=${entry.model || '(provider default)'}, workdir=${entry.workdir}, reason=${entry.reason}`
     );
+    lines.push('');
   }
 
-  return lines.join('\n');
+  return lines.join('\n').trimEnd();
 }
 
 export async function renderSessionHistory(sessionPath: string, limit = 12): Promise<string> {
