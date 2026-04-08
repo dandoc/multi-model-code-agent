@@ -247,10 +247,22 @@ async function main(): Promise<void> {
       await logSessionEvent(() => sessionStore.logMessage('assistant', runtimeAnswer));
       return;
     }
-    ensureProviderReady(config);
-    const reply = await agent.runTurn(text);
-    console.log(`\n[assistant] ${reply}\n`);
-    await logSessionEvent(() => sessionStore.logMessage('assistant', reply));
+
+    try {
+      ensureProviderReady(config);
+      const reply = await agent.runTurn(text);
+      console.log(`\n[assistant] ${reply}\n`);
+      await logSessionEvent(() => sessionStore.logMessage('assistant', reply));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const failureReply = [
+        '요청 처리 중 오류가 발생했습니다.',
+        message,
+        '같은 요청을 다시 시도하거나, 범위를 조금 줄이거나, 더 빠른 모델로 바꿔보세요.',
+      ].join('\n');
+      console.log(`\n[assistant] ${failureReply}\n`);
+      await logSessionEvent(() => sessionStore.logMessage('assistant', failureReply));
+    }
   };
 
   try {

@@ -420,3 +420,15 @@ Validation:
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke:shells`
+
+### 2026-04-08 - Codex timeout resilience
+
+Summary:
+
+- stopped REPL turns from crashing the whole app when a provider request throws, so timeouts now surface as assistant-visible errors and the session stays alive
+- added a single automatic retry for Codex CLI requests after the first timeout, with a clearer final message when both attempts time out
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`

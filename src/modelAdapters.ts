@@ -48,6 +48,10 @@ interface CodexExecEvent {
   };
 }
 
+const CODEX_LOGIN_TIMEOUT_MS = 15_000;
+const CODEX_REQUEST_TIMEOUT_MS = 120_000;
+const CODEX_RETRY_TIMEOUT_MS = 180_000;
+
 function getCodexCommand(): string {
   return 'codex';
 }
@@ -179,7 +183,7 @@ async function runCodexCommand(
 }
 
 async function ensureCodexLogin(config: AgentConfig): Promise<void> {
-  const status = await runCodexCommand(['login', 'status'], '', config, 15_000);
+  const status = await runCodexCommand(['login', 'status'], '', config, CODEX_LOGIN_TIMEOUT_MS);
   const combined = `${status.stdout}\n${status.stderr}`.trim();
 
   if (status.code !== 0 || !/Logged in/i.test(combined)) {
@@ -187,6 +191,10 @@ async function ensureCodexLogin(config: AgentConfig): Promise<void> {
       'The codex provider requires a logged-in Codex CLI session. Run `codex login` and sign in with ChatGPT first.'
     );
   }
+}
+
+function isCodexTimeoutError(error: unknown): boolean {
+  return error instanceof Error && /Codex CLI request timed out/i.test(error.message);
 }
 
 class OllamaAdapter implements ModelAdapter {
@@ -289,7 +297,28 @@ class CodexCliAdapter implements ModelAdapter {
 
     args.push('-');
 
-    const result = await runCodexCommand(args, renderCodexPrompt(messages), config, 120_000);
+    const prompt = renderCodexPrompt(messages);
+    let result: { code: number | null; stdout: string; stderr: string };
+
+    try {
+      result = await runCodexCommand(args, prompt, config, CODEX_REQUEST_TIMEOUT_MS);
+    } catch (error) {
+      if (!isCodexTimeoutError(error)) {
+        throw error;
+      }
+
+      try {
+        result = await runCodexCommand(args, prompt, config, CODEX_RETRY_TIMEOUT_MS);
+      } catch (retryError) {
+        if (isCodexTimeoutError(retryError)) {
+          throw new Error(
+            'Codex CLI request timed out twice. Try again, switch to a faster model, or narrow the request.'
+          );
+        }
+        throw retryError;
+      }
+    }
+
     if (result.code !== 0) {
       const details = result.stderr.trim() || result.stdout.trim() || 'Unknown error';
       throw new Error(`Codex CLI request failed (${result.code}): ${details}`);
