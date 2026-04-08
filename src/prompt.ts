@@ -40,6 +40,8 @@ export function buildSystemPrompt(config: AgentConfig, tools: ToolDefinition[]):
     '- Use write_patch for file changes.',
     '- Do not claim that files were created or updated unless you already received a successful write_patch tool result for that work.',
     '- Use run_shell only when it is clearly helpful.',
+    '- On Windows, the default run_shell environment behaves like cmd. If you need PowerShell-specific commands such as Start-Process, Get-ChildItem, or Set-ExecutionPolicy, set `shell` to `powershell` in the run_shell arguments.',
+    '- If a command is cmd-specific, you may set `shell` to `cmd`. Otherwise omit `shell` or use `default`.',
     '- When replacing text, read the file first so your find string is exact.',
     '- If a tool result says a request was denied or failed, adapt and continue.',
     '- When the task is done, respond with type=message.',

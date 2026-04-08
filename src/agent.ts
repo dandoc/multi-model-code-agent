@@ -312,8 +312,11 @@ export class AgentRunner {
     if (tool.name === 'run_shell') {
       const command = typeof args.command === 'string' ? args.command : '(missing command)';
       const timeoutMs = typeof args.timeoutMs === 'number' ? args.timeoutMs : 30_000;
+      const shell =
+        typeof args.shell === 'string' && args.shell.trim().length > 0 ? args.shell.trim() : 'default';
       return [
         `Approve shell command in ${this.config.workdir}?`,
+        `Shell: ${shell}`,
         `Timeout: ${timeoutMs}ms`,
         'Command:',
         command,

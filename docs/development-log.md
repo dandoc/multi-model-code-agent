@@ -377,3 +377,18 @@ Validation:
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke:sessions`
+
+### 2026-04-08 - Explicit run_shell selection
+
+Summary:
+
+- added an optional `shell` field to `run_shell` so commands can explicitly target the default shell, `cmd`, or `powershell`
+- updated shell approvals to show which shell will run the command
+- taught the system prompt to request `shell: "powershell"` for Windows-specific PowerShell commands such as `Start-Process`
+- added `npm run smoke:shells` to verify default-shell, `cmd`, and `powershell` execution paths
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:shells`

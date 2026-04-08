@@ -17,7 +17,8 @@
     "smoke:failures": "tsx src/writePatchFailureSmoke.ts",
     "smoke:batch": "tsx src/writePatchBatchSmoke.ts",
     "smoke:paths": "tsx src/pathSecuritySmoke.ts",
-    "smoke:sessions": "tsx src/sessionSmoke.ts"
+    "smoke:sessions": "tsx src/sessionSmoke.ts",
+    "smoke:shells": "tsx src/shellSmoke.ts"
   },
   "engines": {
     "node": ">=20"

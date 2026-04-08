@@ -141,6 +141,12 @@ This runs:
 - a path-boundary regression check
 - a session-history persistence and redaction check
 
+For a focused shell-selection regression check, run:
+
+```bash
+npm run smoke:shells
+```
+
 ## Session history
 
 Each REPL session now writes a small JSONL log so you can inspect recent activity with `/history` and browse older sessions with `/sessions`.
@@ -231,6 +237,16 @@ Behavior by provider:
 - `run_shell` requires approval unless auto-approve is on
 - file access is restricted to the chosen `workdir`
 - creating new files and nested folders inside `workdir` is allowed
+
+## Shell selection
+
+`run_shell` accepts an optional `shell` field:
+
+- `default`: use the runtime default shell
+- `cmd`: force `cmd.exe` on Windows
+- `powershell`: force PowerShell on Windows
+
+This is useful when a command is shell-specific. For example, `Start-Process ...` should be run with `shell: "powershell"` instead of the default Windows shell behavior.
 
 ## Edit approvals
 

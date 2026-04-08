@@ -1,4 +1,4 @@
-import { exec as execCallback } from 'node:child_process';
+import { exec as execCallback, execFile as execFileCallback } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -20,6 +20,9 @@ import {
 import type { ToolContext, ToolDefinition, ToolExecutionResult } from './types.js';
 
 const exec = promisify(execCallback);
+const execFile = promisify(execFileCallback);
+
+type RunShellMode = 'default' | 'cmd' | 'powershell';
 
 function getString(
   args: Record<string, unknown>,
@@ -74,6 +77,89 @@ function truncate(text: string, maxChars = 12_000): string {
     return text;
   }
   return `${text.slice(0, maxChars)}\n\n[truncated ${text.length - maxChars} chars]`;
+}
+
+function getRunShellMode(args: Record<string, unknown>): RunShellMode {
+  const raw = getString(args, 'shell').trim().toLowerCase();
+  if (!raw || raw === 'default') {
+    return 'default';
+  }
+  if (raw === 'cmd') {
+    return 'cmd';
+  }
+  if (raw === 'powershell' || raw === 'pwsh' || raw === 'ps') {
+    return 'powershell';
+  }
+
+  throw new Error(`Unsupported shell: ${raw}. Use default, cmd, or powershell.`);
+}
+
+function renderShellLabel(mode: RunShellMode): string {
+  switch (mode) {
+    case 'cmd':
+      return 'cmd';
+    case 'powershell':
+      return process.platform === 'win32' ? 'powershell' : 'pwsh';
+    default:
+      return 'default';
+  }
+}
+
+async function executeShellCommand(
+  command: string,
+  mode: RunShellMode,
+  cwd: string,
+  timeoutMs: number
+): Promise<{ stdout: string; stderr: string }> {
+  if (mode === 'default') {
+    const { stdout, stderr } = await exec(command, {
+      cwd,
+      timeout: timeoutMs,
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    });
+
+    return {
+      stdout,
+      stderr,
+    };
+  }
+
+  if (mode === 'cmd') {
+    if (process.platform !== 'win32') {
+      throw new Error('The cmd shell is only available on Windows.');
+    }
+
+    const { stdout, stderr } = await execFile(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', command], {
+      cwd,
+      timeout: timeoutMs,
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    });
+
+    return {
+      stdout,
+      stderr,
+    };
+  }
+
+  const executable = process.platform === 'win32' ? 'powershell.exe' : 'pwsh';
+  const shellArgs =
+    process.platform === 'win32'
+      ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command]
+      : ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command];
+
+  const { stdout, stderr } = await execFile(executable, shellArgs, {
+    cwd,
+    timeout: timeoutMs,
+    maxBuffer: 1024 * 1024,
+    windowsHide: true,
+  });
+
+  return {
+    stdout,
+    stderr,
+  };
 }
 
 function formatSection(title: string, items: string[], emptyMessage: string): string {
@@ -800,23 +886,31 @@ async function runWritePatch(args: Record<string, unknown>, context: ToolContext
 async function runShell(args: Record<string, unknown>, context: ToolContext): Promise<ToolExecutionResult> {
   const command = getString(args, 'command', { required: true });
   const timeoutMs = Math.max(1_000, Math.min(120_000, Math.floor(getNumber(args, 'timeoutMs', 30_000))));
+  const shell = getRunShellMode(args);
+  const shellLabel = renderShellLabel(shell);
 
   try {
-    const { stdout, stderr } = await exec(command, {
-      cwd: context.config.workdir,
-      timeout: timeoutMs,
-      maxBuffer: 1024 * 1024,
-    });
+    const { stdout, stderr } = await executeShellCommand(
+      command,
+      shell,
+      context.config.workdir,
+      timeoutMs
+    );
 
-    const output = [`STDOUT:\n${stdout || '(empty)'}`, `STDERR:\n${stderr || '(empty)'}`].join('\n\n');
+    const output = [
+      `SHELL: ${shellLabel}`,
+      `STDOUT:\n${stdout || '(empty)'}`,
+      `STDERR:\n${stderr || '(empty)'}`,
+    ].join('\n\n');
 
     return {
       ok: true,
-      summary: `Command completed successfully: ${command}`,
+      summary: `Command completed successfully in ${shellLabel}: ${command}`,
       output: truncate(output),
       metadata: {
         command,
         timeoutMs,
+        shell,
       },
     };
   } catch (error) {
@@ -828,6 +922,7 @@ async function runShell(args: Record<string, unknown>, context: ToolContext): Pr
     };
 
     const output = [
+      `SHELL: ${shellLabel}`,
       `ERROR: ${shellError.message}`,
       `EXIT CODE: ${String(shellError.code ?? 'unknown')}`,
       `STDOUT:\n${shellError.stdout || '(empty)'}`,
@@ -836,11 +931,12 @@ async function runShell(args: Record<string, unknown>, context: ToolContext): Pr
 
     return {
       ok: false,
-      summary: `Command failed: ${command}`,
+      summary: `Command failed in ${shellLabel}: ${command}`,
       output: truncate(output),
       metadata: {
         command,
         timeoutMs,
+        shell,
       },
     };
   }
@@ -917,7 +1013,8 @@ export function createTools(): ToolDefinition[] {
     {
       name: 'run_shell',
       description: 'Run a shell command in the configured workdir.',
-      inputShape: '{ "command": "npm test", "timeoutMs": 30000 }',
+      inputShape:
+        '{ "command": "npm test", "timeoutMs": 30000, "shell": "default|cmd|powershell" }',
       requiresApproval: true,
       run: runShell,
     },
