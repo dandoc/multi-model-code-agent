@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -49,6 +49,16 @@ export type SessionStore = {
   logMessage: (role: ChatRole, content: string) => Promise<void>;
   logCommand: (command: string) => Promise<void>;
   logConfig: (reason: string, config: AgentConfig) => Promise<void>;
+};
+
+export type SessionListEntry = {
+  sessionId: string;
+  sessionPath: string;
+  startedAt: string;
+  workdir: string;
+  provider: AgentConfig['provider'];
+  model: string;
+  reason: string;
 };
 
 function sanitizeConfig(config: AgentConfig): SessionConfigSnapshot {
@@ -102,6 +112,36 @@ function truncateInline(text: string, maxLength = 160): string {
 
 async function appendEvent(sessionPath: string, event: SessionEvent): Promise<void> {
   await appendFile(sessionPath, `${JSON.stringify(event)}\n`, 'utf8');
+}
+
+async function loadSessionEvents(sessionPath: string): Promise<SessionEvent[]> {
+  if (!existsSync(sessionPath)) {
+    return [];
+  }
+
+  const raw = await readFile(sessionPath, 'utf8');
+  return raw
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line) as SessionEvent);
+}
+
+async function loadSessionEntry(sessionPath: string): Promise<SessionListEntry | null> {
+  const events = await loadSessionEvents(sessionPath);
+  const startedEvent = events.find((event) => event.type === 'session_started');
+  if (!startedEvent || startedEvent.type !== 'session_started') {
+    return null;
+  }
+
+  return {
+    sessionId: startedEvent.sessionId,
+    sessionPath,
+    startedAt: startedEvent.timestamp,
+    workdir: startedEvent.config.workdir,
+    provider: startedEvent.config.provider,
+    model: startedEvent.config.model,
+    reason: startedEvent.reason,
+  };
 }
 
 export async function createSessionStore(
@@ -163,17 +203,93 @@ function formatTime(timestamp: string): string {
   return date.toISOString().slice(11, 19);
 }
 
+export async function listRecentSessions(limit = 8): Promise<SessionListEntry[]> {
+  const sessionsDir = getSessionsDir();
+  if (!existsSync(sessionsDir)) {
+    return [];
+  }
+
+  const fileNames = (await readdir(sessionsDir))
+    .filter((name) => name.endsWith('.jsonl'))
+    .sort((left, right) => right.localeCompare(left));
+
+  const entries: SessionListEntry[] = [];
+  for (const fileName of fileNames) {
+    const sessionPath = path.join(sessionsDir, fileName);
+    const entry = await loadSessionEntry(sessionPath);
+    if (!entry) {
+      continue;
+    }
+
+    entries.push(entry);
+    if (entries.length >= limit) {
+      break;
+    }
+  }
+
+  return entries;
+}
+
+export async function resolveSessionEntry(
+  specifier: string,
+  currentSessionId?: string
+): Promise<SessionListEntry | null> {
+  const normalized = specifier.trim();
+  const entries = await listRecentSessions(200);
+
+  if (normalized === 'latest' || normalized === 'previous') {
+    return entries.find((entry) => entry.sessionId !== currentSessionId) ?? null;
+  }
+
+  const exactMatch = entries.find((entry) => entry.sessionId === normalized);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const prefixMatches = entries.filter((entry) => entry.sessionId.startsWith(normalized));
+  if (prefixMatches.length === 1) {
+    return prefixMatches[0];
+  }
+
+  if (prefixMatches.length > 1) {
+    throw new Error(
+      `Session reference "${normalized}" is ambiguous. Use more of the session id from /sessions.`
+    );
+  }
+
+  return null;
+}
+
+export async function renderSessionList(limit = 8, currentSessionId?: string): Promise<string> {
+  const sessionsDir = getSessionsDir();
+  const entries = await listRecentSessions(limit);
+
+  if (entries.length === 0) {
+    return `No saved sessions found under ${sessionsDir}`;
+  }
+
+  const lines = [
+    `Saved sessions (${entries.length})`,
+    `Root: ${sessionsDir}`,
+    'Latest first:',
+  ];
+
+  for (const entry of entries) {
+    const currentLabel = entry.sessionId === currentSessionId ? ' (current)' : '';
+    lines.push(
+      `- ${entry.sessionId}${currentLabel}: provider=${entry.provider}, model=${entry.model || '(provider default)'}, workdir=${entry.workdir}, reason=${entry.reason}`
+    );
+  }
+
+  return lines.join('\n');
+}
+
 export async function renderSessionHistory(sessionPath: string, limit = 12): Promise<string> {
   if (!existsSync(sessionPath)) {
     return `Session file not found: ${sessionPath}`;
   }
 
-  const raw = await readFile(sessionPath, 'utf8');
-  const events = raw
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line) as SessionEvent);
-
+  const events = await loadSessionEvents(sessionPath);
   if (events.length === 0) {
     return 'No session events were recorded.';
   }

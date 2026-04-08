@@ -20,7 +20,12 @@ import {
   renderModelCatalogs,
   resolveStoredModelForProvider,
 } from './providerModels.js';
-import { createSessionStore, renderSessionHistory } from './sessionStore.js';
+import {
+  createSessionStore,
+  renderSessionHistory,
+  renderSessionList,
+  resolveSessionEntry,
+} from './sessionStore.js';
 import { createTools, renderToolCatalog } from './tools.js';
 
 import type { AgentConfig, ModelProvider } from './types.js';
@@ -58,6 +63,9 @@ function printReplHelp(): void {
       '  /help                 Show this help',
       '  /config               Show current config',
       '  /history [count]      Show recent events from the current saved session',
+      '  /history latest [count] or /history <session-id> [count]',
+      '                       Show events from an earlier saved session',
+      '  /sessions [count]     Show recent saved sessions',
       '  /tools                Show tool catalog',
       '  /reset                Clear conversation history',
       '  /provider <name>      Switch provider (ollama, openai, codex) and save it to .env',
@@ -131,6 +139,41 @@ function ensureProviderReady(config: AgentConfig): void {
       `The model \`${config.model}\` is not compatible with provider \`${config.provider}\`. Use /models to inspect choices or /model default to reset.`
     );
   }
+}
+
+function parsePositiveCount(value: string | undefined, fallback: number, max = 50): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return Math.max(1, Math.min(max, parsed));
+}
+
+function parseHistoryRequest(entry: string): { sessionRef?: string; count: number } {
+  const args = entry
+    .slice('/history'.length)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (args.length === 0) {
+    return { count: 12 };
+  }
+
+  if (args.length === 1) {
+    const maybeCount = Number.parseInt(args[0], 10);
+    if (Number.isFinite(maybeCount) && maybeCount > 0) {
+      return { count: parsePositiveCount(args[0], 12) };
+    }
+
+    return { sessionRef: args[0], count: 12 };
+  }
+
+  return {
+    sessionRef: args[0],
+    count: parsePositiveCount(args[1], 12),
+  };
 }
 
 async function main(): Promise<void> {
@@ -249,9 +292,35 @@ async function main(): Promise<void> {
 
       if (entry === '/history' || entry.startsWith('/history ')) {
         await logSessionEvent(() => sessionStore.logCommand(entry));
-        const requestedCount = entry === '/history' ? '12' : entry.slice('/history '.length).trim();
-        const count = Math.max(1, Math.min(50, Number.parseInt(requestedCount, 10) || 12));
-        console.log(`\n${await renderSessionHistory(sessionStore.sessionPath, count)}`);
+        const request = parseHistoryRequest(entry);
+
+        if (!request.sessionRef || request.sessionRef === 'current') {
+          console.log(`\n${await renderSessionHistory(sessionStore.sessionPath, request.count)}`);
+          continue;
+        }
+
+        try {
+          const sessionEntry = await resolveSessionEntry(request.sessionRef, sessionStore.sessionId);
+          if (!sessionEntry) {
+            console.log(
+              `\nCould not find a saved session for "${request.sessionRef}". Use /sessions to inspect recent ids.`
+            );
+            continue;
+          }
+
+          console.log(`\n${await renderSessionHistory(sessionEntry.sessionPath, request.count)}`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.log(`\n${message}`);
+        }
+        continue;
+      }
+
+      if (entry === '/sessions' || entry.startsWith('/sessions ')) {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
+        const requestedCount = entry === '/sessions' ? undefined : entry.slice('/sessions '.length).trim();
+        const count = parsePositiveCount(requestedCount, 8, 30);
+        console.log(`\n${await renderSessionList(count, sessionStore.sessionId)}`);
         continue;
       }
 

@@ -3,7 +3,13 @@ import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { createSessionStore, renderSessionHistory } from './sessionStore.js';
+import {
+  createSessionStore,
+  listRecentSessions,
+  renderSessionHistory,
+  renderSessionList,
+  resolveSessionEntry,
+} from './sessionStore.js';
 
 import type { AgentConfig } from './types.js';
 
@@ -23,6 +29,15 @@ function assertIncludesAll(output: string, expectedSnippets: string[], label: st
       `${label} is missing expected snippets: ${missing.join(', ')}\n\nActual output:\n${output}`
     );
   }
+}
+
+function uniquePrefixFor(target: string, other: string): string {
+  let index = 0;
+  while (index < target.length && target[index] === other[index]) {
+    index += 1;
+  }
+
+  return target.slice(0, Math.min(target.length, index + 1));
 }
 
 async function main(): Promise<void> {
@@ -46,6 +61,21 @@ async function main(): Promise<void> {
   try {
     process.env.MM_AGENT_HOME = tempRoot;
     await mkdir(workdir, { recursive: true });
+
+    const previousWorkdir = path.join(tempRoot, 'workspace-previous');
+    await mkdir(previousWorkdir, { recursive: true });
+
+    const previousStore = await createSessionStore(
+      {
+        ...config,
+        model: 'qwen2.5-coder:7b',
+        workdir: previousWorkdir,
+      },
+      previousWorkdir,
+      'previous session smoke'
+    );
+    await previousStore.logMessage('user', 'Show me the earlier session.');
+    await previousStore.logMessage('assistant', 'This is the earlier session reply.');
 
     const store = await createSessionStore(config, workdir, 'session smoke');
     const expectedSessionsDir = path.join(tempRoot, 'sessions');
@@ -101,6 +131,52 @@ async function main(): Promise<void> {
     if (history.includes(secret)) {
       throw new Error('Rendered history leaked the API key.');
     }
+
+    const sessionList = await renderSessionList(10, store.sessionId);
+    console.log(`[session-smoke] rendered session list:\n${sessionList}\n`);
+
+    assertIncludesAll(
+      sessionList,
+      [
+        `Saved sessions (2)`,
+        `Root: ${expectedSessionsDir}`,
+        `${store.sessionId} (current): provider=ollama, model=qwen2.5-coder:14b, workdir=${workdir}, reason=session smoke`,
+        `${previousStore.sessionId}: provider=ollama, model=qwen2.5-coder:7b, workdir=${previousWorkdir}, reason=previous session smoke`,
+      ],
+      'rendered session list'
+    );
+
+    const recentSessions = await listRecentSessions(10);
+    if (recentSessions.length !== 2) {
+      throw new Error(`Expected 2 recent sessions, got ${recentSessions.length}.`);
+    }
+
+    const latestPrevious = await resolveSessionEntry('latest', store.sessionId);
+    if (!latestPrevious || latestPrevious.sessionId !== previousStore.sessionId) {
+      throw new Error('The "latest" session lookup did not return the previous session.');
+    }
+
+    const shortIdLookup = await resolveSessionEntry(
+      uniquePrefixFor(previousStore.sessionId, store.sessionId),
+      store.sessionId
+    );
+    if (!shortIdLookup || shortIdLookup.sessionId !== previousStore.sessionId) {
+      throw new Error('Short session id lookup did not resolve the previous session.');
+    }
+
+    const previousHistory = await renderSessionHistory(latestPrevious.sessionPath, 10);
+    console.log(`[session-smoke] previous session history:\n${previousHistory}\n`);
+
+    assertIncludesAll(
+      previousHistory,
+      [
+        `Session ${previousStore.sessionId}`,
+        `Workdir: ${previousWorkdir}`,
+        'user: Show me the earlier session.',
+        'assistant: This is the earlier session reply.',
+      ],
+      'previous session history'
+    );
 
     console.log(
       `[session-smoke] All session checks passed in ${formatElapsed(Date.now() - startedAt)}.`

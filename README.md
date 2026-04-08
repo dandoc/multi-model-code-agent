@@ -106,6 +106,9 @@ npm run dev
 - `/help`
 - `/config`
 - `/history [count]`
+- `/history latest [count]`
+- `/history <session-id> [count]`
+- `/sessions [count]`
 - `/tools`
 - `/reset`
 - `/provider ollama|openai|codex` persists to `.env`
@@ -140,11 +143,14 @@ This runs:
 
 ## Session history
 
-Each REPL session now writes a small JSONL log so you can inspect recent activity with `/history`.
+Each REPL session now writes a small JSONL log so you can inspect recent activity with `/history` and browse older sessions with `/sessions`.
 
 - default location: `%USERPROFILE%\\.multi-model-code-agent\\sessions`
 - override location: set `MM_AGENT_HOME`
 - sensitive values such as `/api-key ...` are redacted before they are written
+- use `/sessions` to list recent saved session ids
+- use `/history latest` to inspect the most recent earlier session
+- use `/history <session-id>` to open a specific saved session by full or unique prefix id
 
 ## Good first prompts
 

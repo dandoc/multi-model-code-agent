@@ -346,3 +346,18 @@ Validation:
 - `npm run build`
 - `npm run smoke:sessions`
 - `npm run smoke`
+
+### 2026-04-08 - Session browsing
+
+Summary:
+
+- added saved-session indexing so the REPL can list recent sessions instead of only showing the current one
+- added `/sessions [count]` to browse recent session ids and `/history latest` or `/history <session-id>` to inspect earlier sessions
+- session ids can now be resolved by unique prefix, which makes browsing older sessions less awkward from the terminal
+- expanded the session smoke coverage so it verifies current-session marking, previous-session lookup, and older-session history rendering
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:sessions`
