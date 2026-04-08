@@ -161,6 +161,7 @@ Each REPL session now writes a small JSONL log so you can inspect recent activit
 - sensitive values such as `/api-key ...` are redacted before they are written
 - use `/sessions` to list recent saved session ids
 - `/session` is a short alias for `/sessions`
+- `/sessions` now shows a short title from the first saved user prompt and the last activity time, so similar sessions are easier to tell apart
 - use `/history latest` to inspect the most recent earlier session
 - use `/history <session-id>` to open a specific saved session by full or unique prefix id
 - use `/resume latest` to replace the current conversation with messages from the most recent earlier session

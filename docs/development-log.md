@@ -477,3 +477,17 @@ Validation:
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke:repl`
+
+### 2026-04-08 - Richer session list metadata
+
+Summary:
+
+- `/sessions` now shows a short title derived from the first saved user prompt instead of only raw ids and config fields
+- each listed session now also shows its last activity timestamp, which makes nearby sessions easier to distinguish during the same day
+- fallback titles ignore low-signal browsing commands such as `/sessions` and `/history`, so empty sessions stay readable as `(no prompt yet)`
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:sessions`

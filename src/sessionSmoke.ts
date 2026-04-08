@@ -210,8 +210,12 @@ async function main(): Promise<void> {
         `Root: ${expectedSessionsDir}`,
         'Warning: skipped 2 corrupted session logs and ignored malformed lines in 1 session log while scanning saved sessions.',
         `- id: ${store.sessionId} (current)`,
+        '  title: Summarize this project.',
+        '  last active: ',
         `  provider=ollama, model=qwen2.5-coder:14b, workdir=${workdir}, reason=session smoke`,
         `- id: ${previousStore.sessionId}`,
+        '  title: Show me the earlier session.',
+        '  last active: ',
         `  provider=ollama, model=qwen2.5-coder:7b, workdir=${previousWorkdir}, reason=previous session smoke`,
       ],
       'rendered session list'
@@ -220,6 +224,29 @@ async function main(): Promise<void> {
     const recentSessions = await listRecentSessions(10);
     if (recentSessions.length !== 2) {
       throw new Error(`Expected 2 recent sessions, got ${recentSessions.length}.`);
+    }
+    const currentEntry = recentSessions.find((entry) => entry.sessionId === store.sessionId);
+    if (!currentEntry) {
+      throw new Error('Current session was missing from recent session entries.');
+    }
+    if (currentEntry.title !== 'Summarize this project.') {
+      throw new Error(`Unexpected current session title: ${currentEntry.title}`);
+    }
+    if (!currentEntry.lastActivityAt || Number.isNaN(new Date(currentEntry.lastActivityAt).getTime())) {
+      throw new Error(`Current session lastActivityAt was not a valid timestamp: ${currentEntry.lastActivityAt}`);
+    }
+
+    const previousEntry = recentSessions.find((entry) => entry.sessionId === previousStore.sessionId);
+    if (!previousEntry) {
+      throw new Error('Previous session was missing from recent session entries.');
+    }
+    if (previousEntry.title !== 'Show me the earlier session.') {
+      throw new Error(`Unexpected previous session title: ${previousEntry.title}`);
+    }
+    if (!previousEntry.lastActivityAt || Number.isNaN(new Date(previousEntry.lastActivityAt).getTime())) {
+      throw new Error(
+        `Previous session lastActivityAt was not a valid timestamp: ${previousEntry.lastActivityAt}`
+      );
     }
 
     const latestPrevious = await resolveSessionEntry('latest', store.sessionId);

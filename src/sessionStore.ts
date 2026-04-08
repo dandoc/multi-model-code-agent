@@ -55,6 +55,8 @@ export type SessionListEntry = {
   sessionId: string;
   sessionPath: string;
   startedAt: string;
+  lastActivityAt: string;
+  title: string;
   workdir: string;
   provider: AgentConfig['provider'];
   model: string;
@@ -204,6 +206,48 @@ function truncateInline(text: string, maxLength = 160): string {
   return `${normalized.slice(0, maxLength - 3)}...`;
 }
 
+function isLowSignalSessionCommand(command: string): boolean {
+  const normalized = command.trim().toLowerCase();
+  const lowSignalPrefixes = [
+    '/help',
+    '/history',
+    '/sessions',
+    '/session',
+    '/resume',
+    '/config',
+    '/tools',
+    '/reset',
+  ];
+
+  return lowSignalPrefixes.some(
+    (prefix) => normalized === prefix || normalized.startsWith(`${prefix} `)
+  );
+}
+
+function deriveSessionTitle(events: SessionEvent[], reason: string): string {
+  const firstUserMessage = events.find(
+    (event): event is Extract<SessionEvent, { type: 'message' }> =>
+      event.type === 'message' && event.role === 'user' && event.content.trim().length > 0
+  );
+  if (firstUserMessage) {
+    return truncateInline(firstUserMessage.content, 96);
+  }
+
+  const firstMeaningfulCommand = events.find(
+    (event): event is Extract<SessionEvent, { type: 'command' }> =>
+      event.type === 'command' && !isLowSignalSessionCommand(event.command)
+  );
+  if (firstMeaningfulCommand) {
+    return truncateInline(firstMeaningfulCommand.command, 96);
+  }
+
+  if (reason !== 'startup') {
+    return `Reason: ${truncateInline(reason, 96)}`;
+  }
+
+  return '(no prompt yet)';
+}
+
 async function appendEvent(sessionPath: string, event: SessionEvent): Promise<void> {
   await appendFile(sessionPath, `${JSON.stringify(event)}\n`, 'utf8');
 }
@@ -310,6 +354,8 @@ async function loadSessionEntry(sessionPath: string): Promise<SessionEntryLoad> 
       sessionId: startedEvent.sessionId,
       sessionPath,
       startedAt: startedEvent.timestamp,
+      lastActivityAt: loaded.events.at(-1)?.timestamp ?? startedEvent.timestamp,
+      title: deriveSessionTitle(loaded.events, startedEvent.reason),
       workdir: startedEvent.config.workdir,
       provider: startedEvent.config.provider,
       model: startedEvent.config.model,
@@ -419,6 +465,16 @@ function formatTime(timestamp: string): string {
   return date.toISOString().slice(11, 19);
 }
 
+function formatSessionTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return timestamp;
+  }
+
+  const iso = date.toISOString();
+  return `${iso.slice(0, 10)} ${iso.slice(11, 19)} UTC`;
+}
+
 export async function listRecentSessions(limit = 8): Promise<SessionListEntry[]> {
   return (await scanRecentSessions(limit)).entries;
 }
@@ -506,6 +562,8 @@ export async function renderSessionList(limit = 8, currentSessionId?: string): P
   for (const entry of entries) {
     const currentLabel = entry.sessionId === currentSessionId ? ' (current)' : '';
     lines.push(`- id: ${entry.sessionId}${currentLabel}`);
+    lines.push(`  title: ${entry.title}`);
+    lines.push(`  last active: ${formatSessionTimestamp(entry.lastActivityAt)}`);
     lines.push(
       `  provider=${entry.provider}, model=${entry.model || '(provider default)'}, workdir=${entry.workdir}, reason=${entry.reason}`
     );
