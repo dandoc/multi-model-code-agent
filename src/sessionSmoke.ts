@@ -200,7 +200,7 @@ async function main(): Promise<void> {
       'utf8'
     );
 
-    const sessionList = await renderSessionList(10, store.sessionId);
+    const sessionList = await renderSessionList(10, { currentSessionId: store.sessionId });
     console.log(`[session-smoke] rendered session list:\n${sessionList}\n`);
 
     assertIncludesAll(
@@ -220,6 +220,24 @@ async function main(): Promise<void> {
       ],
       'rendered session list'
     );
+
+    const filteredSessionList = await renderSessionList(10, {
+      currentSessionId: store.sessionId,
+      query: 'earlier',
+    });
+    assertIncludesAll(
+      filteredSessionList,
+      [
+        'Saved sessions (1)',
+        'Filter: earlier',
+        `- id: ${previousStore.sessionId}`,
+        '  title: Show me the earlier session.',
+      ],
+      'filtered session list'
+    );
+    if (filteredSessionList.includes(store.sessionId)) {
+      throw new Error('Filtered session list should not include non-matching sessions.');
+    }
 
     const recentSessions = await listRecentSessions(10);
     if (recentSessions.length !== 2) {

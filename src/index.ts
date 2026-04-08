@@ -30,9 +30,8 @@ import {
 import {
   normalizeReplCommandAlias,
   parseHistoryRequest,
-  parsePositiveCount,
   parseResumeRequest,
-  isWholeNumberText,
+  parseSessionsRequest,
 } from './replCommands.js';
 import { createTools, renderToolCatalog } from './tools.js';
 
@@ -77,6 +76,8 @@ function printReplHelp(): void {
       '  /resume latest [count] or /resume <session-id> [count]',
       '                       Replace the current conversation with saved user/assistant messages',
       '  /sessions [count]     Show recent saved sessions',
+      '  /sessions search <query> [count]',
+      '                       Search saved sessions by title, model, provider, workdir, or reason',
       '  /session [count]      Alias for /sessions',
       '  /tools                Show tool catalog',
       '  /reset                Clear conversation history',
@@ -374,15 +375,27 @@ async function main(): Promise<void> {
 
       if (entry === '/sessions' || entry.startsWith('/sessions ')) {
         await logSessionEvent(() => sessionStore.logCommand(entry));
-        const requestedCount = entry === '/sessions' ? undefined : entry.slice('/sessions '.length).trim();
-        if (requestedCount && !isWholeNumberText(requestedCount)) {
+        const request = parseSessionsRequest(entry);
+        if (request.kind === 'invalid') {
+          console.log(`\n${request.reason}`);
+          continue;
+        }
+
+        if (request.kind === 'search') {
           console.log(
-            '\n/sessions only accepts an optional count. Use /history <session-id> to inspect a session or /resume <session-id> to continue from it.'
+            `\n${await renderSessionList(request.count, {
+              currentSessionId: sessionStore.sessionId,
+              query: request.query,
+            })}`
           );
           continue;
         }
-        const count = parsePositiveCount(requestedCount, 8, 30);
-        console.log(`\n${await renderSessionList(count, sessionStore.sessionId)}`);
+
+        console.log(
+          `\n${await renderSessionList(request.count, {
+            currentSessionId: sessionStore.sessionId,
+          })}`
+        );
         continue;
       }
 

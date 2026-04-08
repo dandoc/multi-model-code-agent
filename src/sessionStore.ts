@@ -98,6 +98,11 @@ type SessionScanResult = {
   partiallyRecoveredCount: number;
 };
 
+type SessionListOptions = {
+  currentSessionId?: string;
+  query?: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -475,6 +480,26 @@ function formatSessionTimestamp(timestamp: string): string {
   return `${iso.slice(0, 10)} ${iso.slice(11, 19)} UTC`;
 }
 
+function matchesSessionSearch(entry: SessionListEntry, query: string): boolean {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  const haystack = [
+    entry.sessionId,
+    entry.title,
+    entry.provider,
+    entry.model,
+    entry.workdir,
+    entry.reason,
+  ]
+    .join('\n')
+    .toLowerCase();
+
+  return haystack.includes(normalizedQuery);
+}
+
 export async function listRecentSessions(limit = 8): Promise<SessionListEntry[]> {
   return (await scanRecentSessions(limit)).entries;
 }
@@ -538,21 +563,31 @@ export async function resolveSessionEntry(
   };
 }
 
-export async function renderSessionList(limit = 8, currentSessionId?: string): Promise<string> {
+export async function renderSessionList(limit = 8, options: SessionListOptions = {}): Promise<string> {
   const sessionsDir = getSessionsDir();
-  const scan = await scanRecentSessions(limit);
-  const entries = scan.entries;
+  const query = options.query?.trim();
+  const scan = await scanRecentSessions(query ? 200 : limit);
+  const entries = query
+    ? scan.entries.filter((entry) => matchesSessionSearch(entry, query)).slice(0, limit)
+    : scan.entries;
 
   if (entries.length === 0) {
     const warning = renderScanWarning(scan, 'saved sessions');
-    return [warning, `No saved sessions found under ${sessionsDir}`].filter(Boolean).join('\n');
+    return [
+      warning,
+      query
+        ? `No saved sessions matched "${query}" under ${sessionsDir}`
+        : `No saved sessions found under ${sessionsDir}`,
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
-  const lines = [
-    `Saved sessions (${entries.length})`,
-    `Root: ${sessionsDir}`,
-    'Latest first:',
-  ];
+  const lines = [`Saved sessions (${entries.length})`, `Root: ${sessionsDir}`];
+  if (query) {
+    lines.push(`Filter: ${query}`);
+  }
+  lines.push('Latest first:');
 
   const warning = renderScanWarning(scan, 'saved sessions');
   if (warning) {
@@ -560,7 +595,7 @@ export async function renderSessionList(limit = 8, currentSessionId?: string): P
   }
 
   for (const entry of entries) {
-    const currentLabel = entry.sessionId === currentSessionId ? ' (current)' : '';
+    const currentLabel = entry.sessionId === options.currentSessionId ? ' (current)' : '';
     lines.push(`- id: ${entry.sessionId}${currentLabel}`);
     lines.push(`  title: ${entry.title}`);
     lines.push(`  last active: ${formatSessionTimestamp(entry.lastActivityAt)}`);

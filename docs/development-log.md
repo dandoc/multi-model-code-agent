@@ -491,3 +491,18 @@ Validation:
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke:sessions`
+
+### 2026-04-08 - Session list search
+
+Summary:
+
+- added `/sessions search <query> [count]` and `/sessions find <query> [count]` so saved sessions can be filtered by title, provider, model, workdir, or reason
+- kept `/sessions <session-id>` invalid on purpose, so session ids are not misread as counts and users are steered toward `/history <session-id>` or `/resume <session-id>`
+- expanded session smoke and REPL parsing smoke to lock in filtered session listing behavior
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:sessions`
+- `npm run smoke:repl`

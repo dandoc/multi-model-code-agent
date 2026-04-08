@@ -65,6 +65,78 @@ export function parseResumeRequest(entry: string): { sessionRef?: string; count:
   };
 }
 
+export type SessionsRequest =
+  | {
+      kind: 'list';
+      count: number;
+    }
+  | {
+      kind: 'search';
+      count: number;
+      query: string;
+    }
+  | {
+      kind: 'invalid';
+      reason: string;
+    };
+
+export function parseSessionsRequest(entry: string): SessionsRequest {
+  const args = entry
+    .slice('/sessions'.length)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (args.length === 0) {
+    return { kind: 'list', count: 8 };
+  }
+
+  const mode = args[0]?.toLowerCase();
+  if (mode === 'search' || mode === 'find') {
+    if (args.length === 1) {
+      return {
+        kind: 'invalid',
+        reason: 'Use /sessions search <query> [count].',
+      };
+    }
+
+    let count = 8;
+    let queryParts = args.slice(1);
+    const last = queryParts.at(-1);
+    if (queryParts.length > 1 && isWholeNumberText(last)) {
+      count = parsePositiveCount(last, 8, 50);
+      queryParts = queryParts.slice(0, -1);
+    }
+
+    const query = queryParts.join(' ').trim();
+    if (!query) {
+      return {
+        kind: 'invalid',
+        reason: 'Use /sessions search <query> [count].',
+      };
+    }
+
+    return {
+      kind: 'search',
+      count,
+      query,
+    };
+  }
+
+  if (args.length === 1 && isWholeNumberText(args[0])) {
+    return {
+      kind: 'list',
+      count: parsePositiveCount(args[0], 8, 30),
+    };
+  }
+
+  return {
+    kind: 'invalid',
+    reason:
+      'Use /sessions [count] or /sessions search <query> [count]. For a specific session use /history <session-id> or /resume <session-id>.',
+  };
+}
+
 export function normalizeReplCommandAlias(entry: string): string {
   if (entry === '/session') {
     return '/sessions';
