@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -112,6 +112,10 @@ async function main(): Promise<void> {
       expectedSessionsDir,
       '2026-12-31T23-59-59-999Z-corrupted.jsonl'
     );
+    const schemaInvalidSessionPath = path.join(
+      expectedSessionsDir,
+      '2026-12-31T23-59-59-998Z-schema-invalid.jsonl'
+    );
 
     console.log('[session-smoke] Created session store');
     console.log(`[session-smoke] sessionId: ${store.sessionId}`);
@@ -143,6 +147,9 @@ async function main(): Promise<void> {
       throw new Error('Raw session log leaked the API key.');
     }
 
+    await appendFile(store.sessionPath, 'null\n', 'utf8');
+    await appendFile(store.sessionPath, '{"type":"session_started","sessionId":"broken"}\n', 'utf8');
+
     const history = await renderSessionHistory(store.sessionPath, 10);
     console.log(`\n[session-smoke] rendered history:\n${history}\n`);
 
@@ -152,6 +159,7 @@ async function main(): Promise<void> {
         'Session ',
         `Path: ${store.sessionPath}`,
         `Workdir: ${workdir}`,
+        'Warning: ignored 2 malformed JSONL lines while reading this session.',
         'Recent events (4):',
         'user: Summarize this project.',
         'assistant: This is a session smoke test reply.',
@@ -170,6 +178,11 @@ async function main(): Promise<void> {
       '{"type":"session_started","timestamp":"2026-04-08T00:00:00.000Z"',
       'utf8'
     );
+    await writeFile(
+      schemaInvalidSessionPath,
+      'null\n{"type":"session_started","sessionId":"broken"}\n',
+      'utf8'
+    );
 
     const sessionList = await renderSessionList(10, store.sessionId);
     console.log(`[session-smoke] rendered session list:\n${sessionList}\n`);
@@ -179,7 +192,7 @@ async function main(): Promise<void> {
       [
         `Saved sessions (2)`,
         `Root: ${expectedSessionsDir}`,
-        'Warning: skipped 1 corrupted session log while scanning saved sessions.',
+        'Warning: skipped 2 corrupted session logs and ignored malformed lines in 1 session log while scanning saved sessions.',
         `${store.sessionId} (current): provider=ollama, model=qwen2.5-coder:14b, workdir=${workdir}, reason=session smoke`,
         `${previousStore.sessionId}: provider=ollama, model=qwen2.5-coder:7b, workdir=${previousWorkdir}, reason=previous session smoke`,
       ],
@@ -198,7 +211,7 @@ async function main(): Promise<void> {
 
     if (
       latestPrevious.warning !==
-      'Warning: skipped 1 corrupted session log while scanning saved sessions.'
+      'Warning: skipped 2 corrupted session logs and ignored malformed lines in 1 session log while scanning saved sessions.'
     ) {
       throw new Error(`Unexpected latest-session warning: ${latestPrevious.warning ?? '(missing)'}`);
     }

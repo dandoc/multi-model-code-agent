@@ -151,7 +151,7 @@ Each REPL session now writes a small JSONL log so you can inspect recent activit
 - use `/sessions` to list recent saved session ids
 - use `/history latest` to inspect the most recent earlier session
 - use `/history <session-id>` to open a specific saved session by full or unique prefix id
-- corrupted session logs are skipped during browsing with a visible warning
+- corrupted or schema-invalid session logs are skipped during browsing with a visible warning
 - exact full session ids are resolved directly, even when they are older than the recent-session scan window
 
 ## Good first prompts

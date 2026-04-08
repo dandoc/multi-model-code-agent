@@ -367,6 +367,7 @@ Validation:
 Summary:
 
 - made JSONL session parsing tolerant so one truncated or malformed session file no longer poisons `/sessions`, `/history latest`, or prefix-based browsing
+- added runtime session-event shape validation so syntactically valid garbage such as `null` or incomplete objects is treated as malformed input instead of crashing session browsing
 - added visible warnings when corrupted session logs are skipped during browsing
 - changed exact `/history <session-id>` lookup to check the direct session file path first, so older sessions remain reachable even after the recent-session scan window
 - expanded the session smoke test with corrupted-log and 205-session exact-id regression cases

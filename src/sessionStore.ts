@@ -84,6 +84,65 @@ type SessionScanResult = {
   partiallyRecoveredCount: number;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean';
+}
+
+function isChatRole(value: unknown): value is ChatRole {
+  return value === 'system' || value === 'user' || value === 'assistant';
+}
+
+function isSessionConfigSnapshot(value: unknown): value is SessionConfigSnapshot {
+  return (
+    isRecord(value) &&
+    (value.provider === 'ollama' || value.provider === 'openai' || value.provider === 'codex') &&
+    isString(value.model) &&
+    isString(value.baseUrl) &&
+    isString(value.workdir) &&
+    isBoolean(value.autoApprove) &&
+    typeof value.maxTurns === 'number' &&
+    typeof value.temperature === 'number' &&
+    isBoolean(value.apiKeySet)
+  );
+}
+
+function isSessionEvent(value: unknown): value is SessionEvent {
+  if (!isRecord(value) || !isString(value.type) || !isString(value.timestamp)) {
+    return false;
+  }
+
+  if (value.type === 'session_started') {
+    return (
+      isString(value.sessionId) &&
+      isString(value.launchCwd) &&
+      isString(value.reason) &&
+      isSessionConfigSnapshot(value.config)
+    );
+  }
+
+  if (value.type === 'message') {
+    return isChatRole(value.role) && isString(value.content);
+  }
+
+  if (value.type === 'command') {
+    return isString(value.command);
+  }
+
+  if (value.type === 'config') {
+    return isString(value.reason) && isSessionConfigSnapshot(value.config);
+  }
+
+  return false;
+}
+
 function sanitizeConfig(config: AgentConfig): SessionConfigSnapshot {
   return {
     provider: config.provider,
@@ -162,7 +221,13 @@ async function loadSessionEvents(sessionPath: string): Promise<SessionEventsLoad
 
   for (const line of lines) {
     try {
-      events.push(JSON.parse(line) as SessionEvent);
+      const parsed = JSON.parse(line) as unknown;
+      if (!isSessionEvent(parsed)) {
+        malformedLineCount += 1;
+        continue;
+      }
+
+      events.push(parsed);
     } catch {
       malformedLineCount += 1;
     }
