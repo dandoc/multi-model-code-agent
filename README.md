@@ -248,6 +248,18 @@ Behavior by provider:
 
 This is useful when a command is shell-specific. For example, `Start-Process ...` should be run with `shell: "powershell"` instead of the default Windows shell behavior.
 
+On Windows, `run_shell` can also retry once in PowerShell after a failed `default`/`cmd` attempt when the command clearly looks PowerShell-specific or when a `start "" ...` launch is a better fit for `Start-Process`.
+
+If you already know a command is PowerShell-specific, setting `shell: "powershell"` is still the most direct option. A good pattern for Python GUI scripts is:
+
+```json
+{
+  "command": "$cmd = Get-Command pyw, pythonw, py, python -ErrorAction SilentlyContinue | Select-Object -First 1; if (-not $cmd) { throw 'Python launcher not found' }; Start-Process $cmd.Source -ArgumentList 'test\\hello.py'",
+  "timeoutMs": 10000,
+  "shell": "powershell"
+}
+```
+
 ## Edit approvals
 
 `write_patch` approvals now show a small diff-style preview before you confirm:

@@ -392,3 +392,31 @@ Validation:
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke:shells`
+
+### 2026-04-08 - Windows GUI shell guidance
+
+Summary:
+
+- strengthened the system prompt so Windows GUI launches prefer `shell: "powershell"` with `Start-Process` on the first attempt
+- added explicit guidance for resolving a working Python launcher (`pyw`, `pythonw`, `py`, or `python`) before launching a GUI script
+- updated the `run_shell` tool shape and README examples so the model sees a PowerShell-first pattern for Tkinter-style launches
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+
+### 2026-04-08 - Automatic Windows shell fallback
+
+Summary:
+
+- taught `run_shell` to retry once in PowerShell on Windows when a failed default/cmd command clearly uses PowerShell syntax
+- added a second Windows fallback path that turns failed `start "" ...` launch commands into `Start-Process`, with Python launcher discovery for GUI-style Python launches
+- updated the prompt and README so shell selection is described as contextual, with runtime fallback support instead of a blanket PowerShell-first rule
+- expanded `smoke:shells` to lock in the automatic PowerShell fallback behavior
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:shells`

@@ -71,6 +71,32 @@ async function main(): Promise<void> {
       assertIncludes(cmdResult.summary, 'cmd', 'cmd shell summary');
       assertIncludes(cmdResult.output, 'SHELL: cmd', 'cmd shell output');
       assertIncludes(cmdResult.output, 'cmd-shell-ok', 'cmd shell stdout');
+
+      const fallbackResult = await runShell.run(
+        {
+          command: "Write-Output 'powershell-fallback-ok'",
+          timeoutMs: 10_000,
+        },
+        context
+      );
+      if (!fallbackResult.ok) {
+        throw new Error(`powershell fallback smoke failed:\n${fallbackResult.output}`);
+      }
+      assertIncludes(
+        fallbackResult.summary,
+        'after fallback to powershell',
+        'powershell fallback summary'
+      );
+      assertIncludes(
+        fallbackResult.output,
+        'AUTO RETRY: default -> powershell',
+        'powershell fallback retry note'
+      );
+      assertIncludes(
+        fallbackResult.output,
+        'powershell-fallback-ok',
+        'powershell fallback stdout'
+      );
     }
 
     const powerShellResult = await runShell.run(

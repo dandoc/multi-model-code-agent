@@ -24,6 +24,13 @@ const execFile = promisify(execFileCallback);
 
 type RunShellMode = 'default' | 'cmd' | 'powershell';
 
+type ShellExecutionError = {
+  stdout?: string;
+  stderr?: string;
+  code?: number | string;
+  message: string;
+};
+
 function getString(
   args: Record<string, unknown>,
   key: string,
@@ -103,6 +110,155 @@ function renderShellLabel(mode: RunShellMode): string {
     default:
       return 'default';
   }
+}
+
+function normalizeShellError(error: unknown): ShellExecutionError {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const shellError = error as ShellExecutionError;
+    return {
+      stdout: shellError.stdout,
+      stderr: shellError.stderr,
+      code: shellError.code,
+      message: shellError.message,
+    };
+  }
+
+  return {
+    message: String(error),
+  };
+}
+
+function escapePowerShellString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function looksLikePowerShellCommand(command: string): boolean {
+  const trimmed = command.trim();
+  if (trimmed.length === 0) {
+    return false;
+  }
+
+  if (/^\$[\w({]/.test(trimmed)) {
+    return true;
+  }
+
+  return /\b(Start-Process|Get-Command|Get-ChildItem|Set-ExecutionPolicy|Write-Output|Select-Object|Where-Object|ForEach-Object|Test-Path|Join-Path|Resolve-Path|New-Item|Remove-Item|Copy-Item|Move-Item)\b/i.test(
+    command
+  );
+}
+
+function parseCmdStartLaunch(command: string): { executable: string; argumentText: string } | null {
+  const match = command.match(/^\s*(?:(?:cmd(?:\.exe)?)\s+\/c\s+)?start\s+""\s+(.+?)\s*$/i);
+  if (!match) {
+    return null;
+  }
+
+  const tail = match[1].trim();
+  if (!tail) {
+    return null;
+  }
+
+  if (tail.startsWith('"')) {
+    const closingQuote = tail.indexOf('"', 1);
+    if (closingQuote > 1) {
+      return {
+        executable: tail.slice(1, closingQuote),
+        argumentText: tail.slice(closingQuote + 1).trim(),
+      };
+    }
+  }
+
+  const firstSpace = tail.search(/\s/);
+  if (firstSpace === -1) {
+    return {
+      executable: tail,
+      argumentText: '',
+    };
+  }
+
+  return {
+    executable: tail.slice(0, firstSpace),
+    argumentText: tail.slice(firstSpace + 1).trim(),
+  };
+}
+
+function buildPythonStartProcessFallback(argumentText: string): string {
+  const launcherProbe =
+    "$launcher = Get-Command pyw, pythonw, py, python -ErrorAction SilentlyContinue | Select-Object -First 1; if (-not $launcher) { throw 'Python launcher not found' }";
+  const launchCommand = argumentText
+    ? `Start-Process $launcher.Source -ArgumentList ${escapePowerShellString(argumentText)}`
+    : 'Start-Process $launcher.Source';
+
+  return `${launcherProbe}; ${launchCommand}`;
+}
+
+function buildShellFallbackPlan(
+  command: string,
+  mode: RunShellMode
+): { shell: RunShellMode; command: string; reason: string } | null {
+  if (process.platform !== 'win32' || mode === 'powershell') {
+    return null;
+  }
+
+  if (looksLikePowerShellCommand(command)) {
+    return {
+      shell: 'powershell',
+      command,
+      reason: 'The command uses PowerShell syntax, so it was retried in PowerShell.',
+    };
+  }
+
+  const launch = parseCmdStartLaunch(command);
+  if (!launch) {
+    return null;
+  }
+
+  const executableName = path.basename(launch.executable).toLowerCase();
+  const pythonLaunchers = new Set([
+    'python',
+    'python.exe',
+    'pythonw',
+    'pythonw.exe',
+    'py',
+    'py.exe',
+    'pyw',
+    'pyw.exe',
+  ]);
+
+  if (pythonLaunchers.has(executableName)) {
+    return {
+      shell: 'powershell',
+      command: buildPythonStartProcessFallback(launch.argumentText),
+      reason:
+        'The cmd-style Python launch failed, so it was retried in PowerShell with launcher detection.',
+    };
+  }
+
+  return {
+    shell: 'powershell',
+    command: [
+      `Start-Process -FilePath ${escapePowerShellString(launch.executable)}`,
+      launch.argumentText ? `-ArgumentList ${escapePowerShellString(launch.argumentText)}` : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
+    reason: 'The cmd-style launch failed, so it was retried in PowerShell with Start-Process.',
+  };
+}
+
+function renderShellFailure(
+  shellLabel: string,
+  shellError: ShellExecutionError,
+  prefix?: string
+): string {
+  const header = prefix ? `${prefix} SHELL: ${shellLabel}` : `SHELL: ${shellLabel}`;
+  return [
+    header,
+    `${prefix ? `${prefix} ` : ''}ERROR: ${shellError.message}`,
+    `${prefix ? `${prefix} ` : ''}EXIT CODE: ${String(shellError.code ?? 'unknown')}`,
+    `${prefix ? `${prefix} ` : ''}STDOUT:\n${shellError.stdout || '(empty)'}`,
+    `${prefix ? `${prefix} ` : ''}STDERR:\n${shellError.stderr || '(empty)'}`,
+  ].join('\n\n');
 }
 
 async function executeShellCommand(
@@ -911,32 +1067,89 @@ async function runShell(args: Record<string, unknown>, context: ToolContext): Pr
         command,
         timeoutMs,
         shell,
+        fallbackUsed: false,
       },
     };
   } catch (error) {
-    const shellError = error as {
-      stdout?: string;
-      stderr?: string;
-      code?: number | string;
-      message: string;
-    };
+    const shellError = normalizeShellError(error);
+    const fallbackPlan = buildShellFallbackPlan(command, shell);
 
-    const output = [
-      `SHELL: ${shellLabel}`,
-      `ERROR: ${shellError.message}`,
-      `EXIT CODE: ${String(shellError.code ?? 'unknown')}`,
-      `STDOUT:\n${shellError.stdout || '(empty)'}`,
-      `STDERR:\n${shellError.stderr || '(empty)'}`,
-    ].join('\n\n');
+    if (fallbackPlan) {
+      const fallbackLabel = renderShellLabel(fallbackPlan.shell);
+      context.log(
+        `Command failed in ${shellLabel}; retrying once in ${fallbackLabel} with automatic fallback.`
+      );
+
+      try {
+        const { stdout, stderr } = await executeShellCommand(
+          fallbackPlan.command,
+          fallbackPlan.shell,
+          context.config.workdir,
+          timeoutMs
+        );
+
+        const output = [
+          `SHELL: ${fallbackLabel}`,
+          `AUTO RETRY: ${shellLabel} -> ${fallbackLabel}`,
+          `FALLBACK REASON: ${fallbackPlan.reason}`,
+          `ORIGINAL COMMAND:\n${command}`,
+          `RETRIED COMMAND:\n${fallbackPlan.command}`,
+          `INITIAL ERROR: ${shellError.message}`,
+          `INITIAL EXIT CODE: ${String(shellError.code ?? 'unknown')}`,
+          `STDOUT:\n${stdout || '(empty)'}`,
+          `STDERR:\n${stderr || '(empty)'}`,
+        ].join('\n\n');
+
+        return {
+          ok: true,
+          summary: `Command completed successfully after fallback to ${fallbackLabel}: ${command}`,
+          output: truncate(output),
+          metadata: {
+            command,
+            timeoutMs,
+            shell: fallbackPlan.shell,
+            initialShell: shell,
+            retriedCommand: fallbackPlan.command,
+            fallbackReason: fallbackPlan.reason,
+            fallbackUsed: true,
+          },
+        };
+      } catch (fallbackError) {
+        const fallbackShellError = normalizeShellError(fallbackError);
+        const output = [
+          renderShellFailure(shellLabel, shellError, 'INITIAL'),
+          `AUTO RETRY: ${shellLabel} -> ${fallbackLabel}`,
+          `FALLBACK REASON: ${fallbackPlan.reason}`,
+          `RETRIED COMMAND:\n${fallbackPlan.command}`,
+          renderShellFailure(fallbackLabel, fallbackShellError, 'FALLBACK'),
+        ].join('\n\n');
+
+        return {
+          ok: false,
+          summary: `Command failed in ${shellLabel} and ${fallbackLabel}: ${command}`,
+          output: truncate(output),
+          metadata: {
+            command,
+            timeoutMs,
+            shell,
+            fallbackShell: fallbackPlan.shell,
+            retriedCommand: fallbackPlan.command,
+            fallbackReason: fallbackPlan.reason,
+            fallbackUsed: true,
+          },
+        };
+      }
+    }
 
     return {
       ok: false,
       summary: `Command failed in ${shellLabel}: ${command}`,
-      output: truncate(output),
+      output: truncate(renderShellFailure(shellLabel, shellError)),
       metadata: {
         command,
         timeoutMs,
         shell,
+        fallbackUsed: false,
       },
     };
   }
@@ -1014,7 +1227,7 @@ export function createTools(): ToolDefinition[] {
       name: 'run_shell',
       description: 'Run a shell command in the configured workdir.',
       inputShape:
-        '{ "command": "npm test", "timeoutMs": 30000, "shell": "default|cmd|powershell" }',
+        '{ "command": "npm test", "timeoutMs": 30000, "shell": "default|cmd|powershell" } or { "command": "$cmd = Get-Command pyw, pythonw, py, python -ErrorAction SilentlyContinue | Select-Object -First 1; Start-Process $cmd.Source -ArgumentList \'test\\\\hello.py\'", "timeoutMs": 10000, "shell": "powershell" }',
       requiresApproval: true,
       run: runShell,
     },
