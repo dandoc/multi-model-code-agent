@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -38,6 +38,35 @@ function uniquePrefixFor(target: string, other: string): string {
   }
 
   return target.slice(0, Math.min(target.length, index + 1));
+}
+
+async function writeSessionFixture(
+  sessionsDir: string,
+  sessionId: string,
+  workdir: string,
+  model: string,
+  reason: string
+): Promise<void> {
+  const sessionPath = path.join(sessionsDir, `${sessionId}.jsonl`);
+  const startedEvent = {
+    type: 'session_started',
+    timestamp: '2026-04-08T00:00:00.000Z',
+    sessionId,
+    launchCwd: workdir,
+    reason,
+    config: {
+      provider: 'ollama',
+      model,
+      baseUrl: 'http://127.0.0.1:11434',
+      workdir,
+      autoApprove: false,
+      maxTurns: 8,
+      temperature: 0.2,
+      apiKeySet: false,
+    },
+  };
+
+  await writeFile(sessionPath, `${JSON.stringify(startedEvent)}\n`, 'utf8');
 }
 
 async function main(): Promise<void> {
@@ -79,6 +108,10 @@ async function main(): Promise<void> {
 
     const store = await createSessionStore(config, workdir, 'session smoke');
     const expectedSessionsDir = path.join(tempRoot, 'sessions');
+    const corruptedSessionPath = path.join(
+      expectedSessionsDir,
+      '2026-12-31T23-59-59-999Z-corrupted.jsonl'
+    );
 
     console.log('[session-smoke] Created session store');
     console.log(`[session-smoke] sessionId: ${store.sessionId}`);
@@ -132,6 +165,12 @@ async function main(): Promise<void> {
       throw new Error('Rendered history leaked the API key.');
     }
 
+    await writeFile(
+      corruptedSessionPath,
+      '{"type":"session_started","timestamp":"2026-04-08T00:00:00.000Z"',
+      'utf8'
+    );
+
     const sessionList = await renderSessionList(10, store.sessionId);
     console.log(`[session-smoke] rendered session list:\n${sessionList}\n`);
 
@@ -140,6 +179,7 @@ async function main(): Promise<void> {
       [
         `Saved sessions (2)`,
         `Root: ${expectedSessionsDir}`,
+        'Warning: skipped 1 corrupted session log while scanning saved sessions.',
         `${store.sessionId} (current): provider=ollama, model=qwen2.5-coder:14b, workdir=${workdir}, reason=session smoke`,
         `${previousStore.sessionId}: provider=ollama, model=qwen2.5-coder:7b, workdir=${previousWorkdir}, reason=previous session smoke`,
       ],
@@ -152,19 +192,26 @@ async function main(): Promise<void> {
     }
 
     const latestPrevious = await resolveSessionEntry('latest', store.sessionId);
-    if (!latestPrevious || latestPrevious.sessionId !== previousStore.sessionId) {
+    if (!latestPrevious.entry || latestPrevious.entry.sessionId !== previousStore.sessionId) {
       throw new Error('The "latest" session lookup did not return the previous session.');
+    }
+
+    if (
+      latestPrevious.warning !==
+      'Warning: skipped 1 corrupted session log while scanning saved sessions.'
+    ) {
+      throw new Error(`Unexpected latest-session warning: ${latestPrevious.warning ?? '(missing)'}`);
     }
 
     const shortIdLookup = await resolveSessionEntry(
       uniquePrefixFor(previousStore.sessionId, store.sessionId),
       store.sessionId
     );
-    if (!shortIdLookup || shortIdLookup.sessionId !== previousStore.sessionId) {
+    if (!shortIdLookup.entry || shortIdLookup.entry.sessionId !== previousStore.sessionId) {
       throw new Error('Short session id lookup did not resolve the previous session.');
     }
 
-    const previousHistory = await renderSessionHistory(latestPrevious.sessionPath, 10);
+    const previousHistory = await renderSessionHistory(latestPrevious.entry.sessionPath, 10);
     console.log(`[session-smoke] previous session history:\n${previousHistory}\n`);
 
     assertIncludesAll(
@@ -177,6 +224,37 @@ async function main(): Promise<void> {
       ],
       'previous session history'
     );
+
+    const bulkRoot = path.join(tempRoot, 'bulk-home');
+    const bulkSessionsDir = path.join(bulkRoot, 'sessions');
+    const oldestSessionId = '2026-01-01T00-00-00-000Z-bulk-000000';
+    process.env.MM_AGENT_HOME = bulkRoot;
+    await mkdir(bulkSessionsDir, { recursive: true });
+
+    for (let index = 0; index < 205; index += 1) {
+      const sessionId = `2026-01-01T00-00-00-000Z-bulk-${String(index).padStart(6, '0')}`;
+      await writeSessionFixture(
+        bulkSessionsDir,
+        sessionId,
+        path.join(bulkRoot, `workspace-${index}`),
+        'qwen2.5-coder:7b',
+        'bulk session fixture'
+      );
+    }
+
+    const oldestResolution = await resolveSessionEntry(oldestSessionId);
+    if (!oldestResolution.entry || oldestResolution.entry.sessionId !== oldestSessionId) {
+      throw new Error('Exact full session id lookup failed beyond the recent-session scan window.');
+    }
+
+    const oldestHistory = await renderSessionHistory(oldestResolution.entry.sessionPath, 2);
+    assertIncludesAll(
+      oldestHistory,
+      [`Session ${oldestSessionId}`, `Workdir: ${path.join(bulkRoot, 'workspace-0')}`],
+      'oldest session history'
+    );
+
+    process.env.MM_AGENT_HOME = tempRoot;
 
     console.log(
       `[session-smoke] All session checks passed in ${formatElapsed(Date.now() - startedAt)}.`

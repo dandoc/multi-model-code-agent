@@ -300,15 +300,16 @@ async function main(): Promise<void> {
         }
 
         try {
-          const sessionEntry = await resolveSessionEntry(request.sessionRef, sessionStore.sessionId);
-          if (!sessionEntry) {
+          const resolution = await resolveSessionEntry(request.sessionRef, sessionStore.sessionId);
+          if (!resolution.entry) {
             console.log(
               `\nCould not find a saved session for "${request.sessionRef}". Use /sessions to inspect recent ids.`
             );
             continue;
           }
 
-          console.log(`\n${await renderSessionHistory(sessionEntry.sessionPath, request.count)}`);
+          const history = await renderSessionHistory(resolution.entry.sessionPath, request.count);
+          console.log(`\n${[resolution.warning, history].filter(Boolean).join('\n')}`);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           console.log(`\n${message}`);

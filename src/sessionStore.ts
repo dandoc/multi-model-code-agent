@@ -61,6 +61,29 @@ export type SessionListEntry = {
   reason: string;
 };
 
+export type SessionResolution = {
+  entry: SessionListEntry | null;
+  warning?: string;
+};
+
+type SessionEventsLoad = {
+  events: SessionEvent[];
+  malformedLineCount: number;
+  readError?: string;
+};
+
+type SessionEntryLoad = {
+  entry: SessionListEntry | null;
+  malformedLineCount: number;
+  corruptionReason?: string;
+};
+
+type SessionScanResult = {
+  entries: SessionListEntry[];
+  skippedCorruptedCount: number;
+  partiallyRecoveredCount: number;
+};
+
 function sanitizeConfig(config: AgentConfig): SessionConfigSnapshot {
   return {
     provider: config.provider,
@@ -114,34 +137,150 @@ async function appendEvent(sessionPath: string, event: SessionEvent): Promise<vo
   await appendFile(sessionPath, `${JSON.stringify(event)}\n`, 'utf8');
 }
 
-async function loadSessionEvents(sessionPath: string): Promise<SessionEvent[]> {
+async function loadSessionEvents(sessionPath: string): Promise<SessionEventsLoad> {
   if (!existsSync(sessionPath)) {
-    return [];
+    return {
+      events: [],
+      malformedLineCount: 0,
+    };
   }
 
-  const raw = await readFile(sessionPath, 'utf8');
-  return raw
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line) as SessionEvent);
-}
+  let raw = '';
+  try {
+    raw = await readFile(sessionPath, 'utf8');
+  } catch (error) {
+    return {
+      events: [],
+      malformedLineCount: 0,
+      readError: error instanceof Error ? error.message : String(error),
+    };
+  }
 
-async function loadSessionEntry(sessionPath: string): Promise<SessionListEntry | null> {
-  const events = await loadSessionEvents(sessionPath);
-  const startedEvent = events.find((event) => event.type === 'session_started');
-  if (!startedEvent || startedEvent.type !== 'session_started') {
-    return null;
+  const lines = raw.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  const events: SessionEvent[] = [];
+  let malformedLineCount = 0;
+
+  for (const line of lines) {
+    try {
+      events.push(JSON.parse(line) as SessionEvent);
+    } catch {
+      malformedLineCount += 1;
+    }
   }
 
   return {
-    sessionId: startedEvent.sessionId,
-    sessionPath,
-    startedAt: startedEvent.timestamp,
-    workdir: startedEvent.config.workdir,
-    provider: startedEvent.config.provider,
-    model: startedEvent.config.model,
-    reason: startedEvent.reason,
+    events,
+    malformedLineCount,
   };
+}
+
+function formatMalformedLineWarning(count: number): string {
+  return `ignored ${count} malformed JSONL line${count === 1 ? '' : 's'}`;
+}
+
+function buildSessionPath(sessionId: string): string {
+  return path.join(getSessionsDir(), `${sessionId}.jsonl`);
+}
+
+function isSafeSessionSpecifier(specifier: string): boolean {
+  return /^[A-Za-z0-9-]+$/.test(specifier) && path.basename(specifier) === specifier;
+}
+
+function renderScanWarning(result: SessionScanResult, context = 'saved sessions'): string | undefined {
+  const parts: string[] = [];
+  if (result.skippedCorruptedCount > 0) {
+    parts.push(
+      `skipped ${result.skippedCorruptedCount} corrupted session log${result.skippedCorruptedCount === 1 ? '' : 's'}`
+    );
+  }
+  if (result.partiallyRecoveredCount > 0) {
+    parts.push(
+      `ignored malformed lines in ${result.partiallyRecoveredCount} session log${result.partiallyRecoveredCount === 1 ? '' : 's'}`
+    );
+  }
+
+  if (parts.length === 0) {
+    return undefined;
+  }
+
+  return `Warning: ${parts.join(' and ')} while scanning ${context}.`;
+}
+
+async function loadSessionEntry(sessionPath: string): Promise<SessionEntryLoad> {
+  const loaded = await loadSessionEvents(sessionPath);
+  if (loaded.readError) {
+    return {
+      entry: null,
+      malformedLineCount: loaded.malformedLineCount,
+      corruptionReason: `could not read ${path.basename(sessionPath)}: ${loaded.readError}`,
+    };
+  }
+
+  const startedEvent = loaded.events.find((event) => event.type === 'session_started');
+  if (!startedEvent || startedEvent.type !== 'session_started') {
+    return {
+      entry: null,
+      malformedLineCount: loaded.malformedLineCount,
+      corruptionReason:
+        loaded.malformedLineCount > 0
+          ? `${path.basename(sessionPath)} is missing a readable session start record and ${formatMalformedLineWarning(loaded.malformedLineCount)}`
+          : `${path.basename(sessionPath)} is missing a readable session start record`,
+    };
+  }
+
+  return {
+    entry: {
+      sessionId: startedEvent.sessionId,
+      sessionPath,
+      startedAt: startedEvent.timestamp,
+      workdir: startedEvent.config.workdir,
+      provider: startedEvent.config.provider,
+      model: startedEvent.config.model,
+      reason: startedEvent.reason,
+    },
+    malformedLineCount: loaded.malformedLineCount,
+  };
+}
+
+async function scanRecentSessions(limit?: number): Promise<SessionScanResult> {
+  const sessionsDir = getSessionsDir();
+  if (!existsSync(sessionsDir)) {
+    return {
+      entries: [],
+      skippedCorruptedCount: 0,
+      partiallyRecoveredCount: 0,
+    };
+  }
+
+  const fileNames = (await readdir(sessionsDir))
+    .filter((name) => name.endsWith('.jsonl'))
+    .sort((left, right) => right.localeCompare(left));
+
+  const result: SessionScanResult = {
+    entries: [],
+    skippedCorruptedCount: 0,
+    partiallyRecoveredCount: 0,
+  };
+
+  for (const fileName of fileNames) {
+    const sessionPath = path.join(sessionsDir, fileName);
+    const loaded = await loadSessionEntry(sessionPath);
+    if (!loaded.entry) {
+      result.skippedCorruptedCount += 1;
+      continue;
+    }
+
+    if (loaded.malformedLineCount > 0) {
+      result.partiallyRecoveredCount += 1;
+    }
+
+    result.entries.push(loaded.entry);
+    if (limit && result.entries.length >= limit) {
+      break;
+    }
+  }
+
+  return result;
 }
 
 export async function createSessionStore(
@@ -204,51 +343,54 @@ function formatTime(timestamp: string): string {
 }
 
 export async function listRecentSessions(limit = 8): Promise<SessionListEntry[]> {
-  const sessionsDir = getSessionsDir();
-  if (!existsSync(sessionsDir)) {
-    return [];
-  }
-
-  const fileNames = (await readdir(sessionsDir))
-    .filter((name) => name.endsWith('.jsonl'))
-    .sort((left, right) => right.localeCompare(left));
-
-  const entries: SessionListEntry[] = [];
-  for (const fileName of fileNames) {
-    const sessionPath = path.join(sessionsDir, fileName);
-    const entry = await loadSessionEntry(sessionPath);
-    if (!entry) {
-      continue;
-    }
-
-    entries.push(entry);
-    if (entries.length >= limit) {
-      break;
-    }
-  }
-
-  return entries;
+  return (await scanRecentSessions(limit)).entries;
 }
 
 export async function resolveSessionEntry(
   specifier: string,
   currentSessionId?: string
-): Promise<SessionListEntry | null> {
+): Promise<SessionResolution> {
   const normalized = specifier.trim();
-  const entries = await listRecentSessions(200);
+  if (isSafeSessionSpecifier(normalized)) {
+    const directSessionPath = buildSessionPath(normalized);
+    if (existsSync(directSessionPath)) {
+      const directEntry = await loadSessionEntry(directSessionPath);
+      if (!directEntry.entry) {
+        throw new Error(
+          `Session log is corrupted: ${directEntry.corruptionReason ?? normalized}`
+        );
+      }
+
+      return {
+        entry: directEntry.entry,
+      };
+    }
+  }
+
+  const scan = await scanRecentSessions(200);
+  const warning = renderScanWarning(scan, 'saved sessions');
 
   if (normalized === 'latest' || normalized === 'previous') {
-    return entries.find((entry) => entry.sessionId !== currentSessionId) ?? null;
+    return {
+      entry: scan.entries.find((entry) => entry.sessionId !== currentSessionId) ?? null,
+      warning,
+    };
   }
 
-  const exactMatch = entries.find((entry) => entry.sessionId === normalized);
+  const exactMatch = scan.entries.find((entry) => entry.sessionId === normalized);
   if (exactMatch) {
-    return exactMatch;
+    return {
+      entry: exactMatch,
+      warning,
+    };
   }
 
-  const prefixMatches = entries.filter((entry) => entry.sessionId.startsWith(normalized));
+  const prefixMatches = scan.entries.filter((entry) => entry.sessionId.startsWith(normalized));
   if (prefixMatches.length === 1) {
-    return prefixMatches[0];
+    return {
+      entry: prefixMatches[0],
+      warning,
+    };
   }
 
   if (prefixMatches.length > 1) {
@@ -257,15 +399,20 @@ export async function resolveSessionEntry(
     );
   }
 
-  return null;
+  return {
+    entry: null,
+    warning,
+  };
 }
 
 export async function renderSessionList(limit = 8, currentSessionId?: string): Promise<string> {
   const sessionsDir = getSessionsDir();
-  const entries = await listRecentSessions(limit);
+  const scan = await scanRecentSessions(limit);
+  const entries = scan.entries;
 
   if (entries.length === 0) {
-    return `No saved sessions found under ${sessionsDir}`;
+    const warning = renderScanWarning(scan, 'saved sessions');
+    return [warning, `No saved sessions found under ${sessionsDir}`].filter(Boolean).join('\n');
   }
 
   const lines = [
@@ -273,6 +420,11 @@ export async function renderSessionList(limit = 8, currentSessionId?: string): P
     `Root: ${sessionsDir}`,
     'Latest first:',
   ];
+
+  const warning = renderScanWarning(scan, 'saved sessions');
+  if (warning) {
+    lines.push(warning);
+  }
 
   for (const entry of entries) {
     const currentLabel = entry.sessionId === currentSessionId ? ' (current)' : '';
@@ -289,15 +441,24 @@ export async function renderSessionHistory(sessionPath: string, limit = 12): Pro
     return `Session file not found: ${sessionPath}`;
   }
 
-  const events = await loadSessionEvents(sessionPath);
+  const loaded = await loadSessionEvents(sessionPath);
+  if (loaded.readError) {
+    return `Session log could not be read: ${loaded.readError}`;
+  }
+
+  const events = loaded.events;
   if (events.length === 0) {
+    if (loaded.malformedLineCount > 0) {
+      return `Session log is corrupted: no readable events found in ${sessionPath} (${formatMalformedLineWarning(loaded.malformedLineCount)}).`;
+    }
+
     return 'No session events were recorded.';
   }
 
   const startedEvent = events.find((event) => event.type === 'session_started');
   const visibleEvents = events.filter((event) => event.type !== 'session_started').slice(-limit);
 
-  const lines = [
+  const headerLines = [
     startedEvent && startedEvent.type === 'session_started'
       ? `Session ${startedEvent.sessionId}`
       : `Session ${path.basename(sessionPath, '.jsonl')}`,
@@ -308,8 +469,20 @@ export async function renderSessionHistory(sessionPath: string, limit = 12): Pro
     startedEvent && startedEvent.type === 'session_started'
       ? `Workdir: ${startedEvent.config.workdir}`
       : '',
-    `Recent events (${visibleEvents.length}):`,
   ].filter(Boolean);
+
+  const warningLines: string[] = [];
+  if (loaded.malformedLineCount > 0) {
+    warningLines.push(
+      `Warning: ${formatMalformedLineWarning(loaded.malformedLineCount)} while reading this session.`
+    );
+  }
+
+  if (!startedEvent) {
+    warningLines.push('Warning: session start metadata is missing or unreadable.');
+  }
+
+  const lines = [...headerLines, ...warningLines, `Recent events (${visibleEvents.length}):`];
 
   if (visibleEvents.length === 0) {
     lines.push('- No user-facing events yet.');
