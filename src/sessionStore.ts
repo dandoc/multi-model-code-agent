@@ -106,7 +106,7 @@ type SessionListOptions = {
 type SessionActivitySummary = {
   userMessages: number;
   assistantMessages: number;
-  commands: number;
+  replCommands: number;
   configChanges: number;
   totalEvents: number;
   profile: string;
@@ -229,8 +229,10 @@ function isLowSignalSessionCommand(command: string): boolean {
     '/session',
     '/resume',
     '/config',
+    '/models',
     '/tools',
     '/reset',
+    '/quit',
   ];
 
   return lowSignalPrefixes.some(
@@ -238,10 +240,28 @@ function isLowSignalSessionCommand(command: string): boolean {
   );
 }
 
+function isLowSignalSessionMessage(content: string): boolean {
+  const normalized = content.trim().toLowerCase();
+  const lowSignalMessages = new Set([
+    'config',
+    'current config',
+    'current model',
+    'what model',
+    'which model',
+    'current provider',
+    'which provider',
+  ]);
+
+  return lowSignalMessages.has(normalized);
+}
+
 function deriveSessionTitle(events: SessionEvent[], reason: string): string {
   const firstUserMessage = events.find(
     (event): event is Extract<SessionEvent, { type: 'message' }> =>
-      event.type === 'message' && event.role === 'user' && event.content.trim().length > 0
+      event.type === 'message' &&
+      event.role === 'user' &&
+      event.content.trim().length > 0 &&
+      !isLowSignalSessionMessage(event.content)
   );
   if (firstUserMessage) {
     return truncateInline(firstUserMessage.content, 96);
@@ -512,12 +532,12 @@ function matchesSessionSearch(entry: SessionListEntry, query: string): boolean {
 function summarizeSessionActivity(events: SessionEvent[]): SessionActivitySummary {
   let userMessages = 0;
   let assistantMessages = 0;
-  let commands = 0;
+  let replCommands = 0;
   let configChanges = 0;
 
   for (const event of events) {
     if (event.type === 'message') {
-      if (event.role === 'user') {
+      if (event.role === 'user' && !isLowSignalSessionMessage(event.content)) {
         userMessages += 1;
       } else if (event.role === 'assistant') {
         assistantMessages += 1;
@@ -526,7 +546,9 @@ function summarizeSessionActivity(events: SessionEvent[]): SessionActivitySummar
     }
 
     if (event.type === 'command') {
-      commands += 1;
+      if (!isLowSignalSessionCommand(event.command)) {
+        replCommands += 1;
+      }
       continue;
     }
 
@@ -535,22 +557,22 @@ function summarizeSessionActivity(events: SessionEvent[]): SessionActivitySummar
     }
   }
 
-  const totalEvents = userMessages + assistantMessages + commands + configChanges;
-  let profile = 'light';
-  if (commands >= Math.max(2, userMessages + assistantMessages) && commands > 0) {
+  const totalEvents = userMessages + assistantMessages + replCommands + configChanges;
+  let profile = totalEvents === 0 ? 'idle' : 'light';
+  if (replCommands >= Math.max(2, userMessages + assistantMessages) && replCommands > 0) {
     profile = 'command-heavy';
   } else if (configChanges >= 2 && userMessages + assistantMessages <= 4) {
     profile = 'setup-heavy';
-  } else if (userMessages + assistantMessages >= 6 && commands <= 2) {
+  } else if (userMessages + assistantMessages >= 6 && replCommands <= 2) {
     profile = 'chat-heavy';
-  } else if (userMessages + assistantMessages >= 2 && commands >= 1) {
+  } else if (userMessages + assistantMessages >= 2 && replCommands >= 1) {
     profile = 'mixed';
   }
 
   return {
     userMessages,
     assistantMessages,
-    commands,
+    replCommands,
     configChanges,
     totalEvents,
     profile,
@@ -696,7 +718,7 @@ export async function renderSessionComparison(
       `  provider=${entry.provider}, model=${entry.model || '(provider default)'}, reason=${entry.reason}`
     );
     lines.push(
-      `  activity: user=${summary.userMessages}, assistant=${summary.assistantMessages}, commands=${summary.commands}, config=${summary.configChanges}, total=${summary.totalEvents}`
+      `  activity: user=${summary.userMessages}, assistant=${summary.assistantMessages}, repl commands=${summary.replCommands}, config=${summary.configChanges}, total=${summary.totalEvents}`
     );
     lines.push(`  profile: ${summary.profile}`);
     lines.push('');

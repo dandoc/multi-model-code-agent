@@ -247,11 +247,11 @@ async function main(): Promise<void> {
         'Recent session comparison (2)',
         `- id: ${store.sessionId} (current)`,
         '  title: Summarize this project.',
-        '  activity: user=1, assistant=1, commands=1, config=1, total=4',
+        '  activity: user=1, assistant=1, repl commands=1, config=1, total=4',
         '  profile: mixed',
         `- id: ${previousStore.sessionId}`,
         '  title: Show me the earlier session.',
-        '  activity: user=1, assistant=1, commands=0, config=0, total=2',
+        '  activity: user=1, assistant=1, repl commands=0, config=0, total=2',
       ],
       'session comparison'
     );
