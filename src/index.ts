@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';

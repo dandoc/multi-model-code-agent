@@ -102,6 +102,31 @@ Or rely on `.env`:
 npm run dev
 ```
 
+## CLI install and deploy
+
+If you want a built CLI entrypoint instead of `npm run dev`, use:
+
+```bash
+npm run build
+npm start -- --help
+```
+
+For a local global install from this checkout:
+
+```bash
+npm run build
+npm link
+mm-agent --help
+```
+
+Notes:
+
+- the CLI command name is `mm-agent`
+- the built entrypoint is `dist/index.js`
+- the built CLI now includes a `#!/usr/bin/env node` shebang so it can be launched as a real command after `npm link` or `npm install -g .`
+- `package.json` is still marked `private`, so this is a local install/release-readiness path, not an npm publish workflow yet
+- run `npm run smoke:packaging` to verify the built CLI entrypoint and `--help` path
+
 ## REPL commands
 
 - `/help`
@@ -181,6 +206,7 @@ This runs:
 - a session-history persistence and redaction check
 - a model-catalog search and family-hint regression check
 - a provider adapter retry/fallback regression check
+- a built-CLI packaging check (`dist/index.js`, shebang, and `--help`)
 - a provider-readiness doctor regression check
 - a live-provider smoke-matrix regression check
 - a JSON/tool-call normalization regression check

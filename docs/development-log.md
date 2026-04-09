@@ -674,12 +674,15 @@ Summary:
 - tool result summaries now use a more consistent `SUCCESS` / `FAILED` prefix style for quicker scanning, with run-shell and run-files smoke updated to lock that in
 - approval prompts for `write_patch`, `run_shell`, and `run_files` now use a shorter field-style layout, and `npm run smoke:approvals` locks in those confirm messages
 - session/profile result views (`/status`, `/sessions summary`, `/resume`, `/profiles diff`, profile load preview) now use short sectioned layouts so runtime, activity, and conversation details are easier to scan
+- added `smoke:packaging`, a built-CLI deployment check that verifies the packaged entrypoint, node shebang, and `--help` flow
+- refreshed `docs/milestones.md` so roadmap status now matches the current implementation instead of the older MVP state
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:
 
 - `npm run typecheck`
 - `npm run build`
+- `npm run smoke:packaging`
 - `npm run smoke:profiles`
 - `npm run smoke:sessions`
 - `npm run smoke:repl`
