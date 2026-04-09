@@ -296,10 +296,28 @@ async function main(): Promise<void> {
     'Expected /models <provider> search <query> to parse correctly.'
   );
 
+  const modelsCurrentDoctor = parseModelsRequest('/models doctor');
+  assert(
+    modelsCurrentDoctor.kind === 'doctor' && modelsCurrentDoctor.scope === 'current',
+    'Expected /models doctor to target the current provider.'
+  );
+
+  const modelsAllDoctor = parseModelsRequest('/models all doctor');
+  assert(
+    modelsAllDoctor.kind === 'doctor' && modelsAllDoctor.scope === 'all',
+    'Expected /models all doctor to parse correctly.'
+  );
+
   const modelsInvalid = parseModelsRequest('/models current search');
   assert(
     modelsInvalid.kind === 'invalid',
     'Expected incomplete /models ... search to be rejected.'
+  );
+
+  const modelsDoctorInvalid = parseModelsRequest('/models doctor now');
+  assert(
+    modelsDoctorInvalid.kind === 'invalid',
+    'Expected malformed /models doctor syntax to be rejected.'
   );
 
   console.log('[repl-smoke] All REPL command parsing checks passed.');

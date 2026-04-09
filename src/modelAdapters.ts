@@ -372,6 +372,37 @@ class CodexCliAdapter implements ModelAdapter {
   }
 }
 
+export async function getCodexLoginStatus(config: AgentConfig): Promise<{
+  available: boolean;
+  loggedIn: boolean;
+  detail: string;
+}> {
+  try {
+    const status = await runCodexCommand(['login', 'status'], '', config, CODEX_LOGIN_TIMEOUT_MS);
+    const detail = `${status.stdout}\n${status.stderr}`.trim() || 'No status output.';
+    return {
+      available: true,
+      loggedIn: status.code === 0 && /Logged in/i.test(detail),
+      detail,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/Failed to start codex CLI/i.test(message)) {
+      return {
+        available: false,
+        loggedIn: false,
+        detail: message,
+      };
+    }
+
+    return {
+      available: true,
+      loggedIn: false,
+      detail: message,
+    };
+  }
+}
+
 export function createModelAdapter(config: AgentConfig): ModelAdapter {
   if (config.provider === 'openai') {
     return new OpenAICompatibleAdapter();

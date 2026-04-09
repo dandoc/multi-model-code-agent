@@ -140,6 +140,7 @@ npm run dev
 - `/model default` resets to the provider default
 - `/models [current|all|provider]` shows model choices
 - `/models [current|all|provider] search <query>` filters model names and shows family hints
+- `/models [current|all|provider] doctor` checks provider readiness and common failure causes
 - `/base-url <url>` persists to `.env`
 - `/api-key <value>`
 - `/workdir <path>`
@@ -166,6 +167,7 @@ This runs:
 - a path-boundary regression check
 - a session-history persistence and redaction check
 - a model-catalog search and family-hint regression check
+- a provider-readiness doctor regression check
 
 For a focused shell-selection regression check, run:
 
@@ -282,6 +284,8 @@ Inside the REPL you can inspect model choices with:
 /models codex
 /models search qwen
 /models codex search gpt-5
+/models doctor
+/models all doctor
 ```
 
 Behavior by provider:
@@ -294,6 +298,13 @@ Search behavior:
 
 - `/models ... search <query>` filters the visible model names before rendering
 - filtered results also include short family hints for well-known choices such as Qwen coder, Gemma, GPT-5.4, and Codex-oriented models
+
+Doctor behavior:
+
+- `/models ... doctor` checks the selected provider scope for common setup failures
+- `ollama` doctor checks the local `ollama list` command, base URL shape, and whether the expected model is installed
+- `openai` doctor checks base URL shape, whether an API key is configured, and whether `/models` is reachable
+- `codex` doctor checks Codex CLI availability and ChatGPT login status
 
 ## Safety defaults
 

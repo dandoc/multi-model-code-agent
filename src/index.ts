@@ -28,6 +28,7 @@ import {
   providerBaseUrlEnvKey,
   providerModelEnvKey,
   renderModelCatalogs,
+  renderModelDiagnostics,
   resolveStoredModelForProvider,
 } from './providerModels.js';
 import {
@@ -139,6 +140,8 @@ function printReplHelp(): void {
       '  /models [scope]       Show models for current, all, or one provider',
       '  /models [scope] search <query>',
       '                       Filter available model names and show family hints',
+      '  /models [scope] doctor',
+      '                       Diagnose provider readiness and common failure causes',
       '  /base-url <url>       Switch base URL and save it to .env',
       '  /api-key <value>      Set API key for this session',
       '  /workdir <path>       Change workdir',
@@ -939,6 +942,11 @@ async function main(): Promise<void> {
         const request = parseModelsRequest(entry);
         if (request.kind === 'invalid') {
           console.log(`\n${request.reason}`);
+          continue;
+        }
+
+        if (request.kind === 'doctor') {
+          console.log(`\n${await renderModelDiagnostics(config, request.scope)}`);
           continue;
         }
 

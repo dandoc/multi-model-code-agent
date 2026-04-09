@@ -160,6 +160,10 @@ export type ModelsRequest =
       query?: string;
     }
   | {
+      kind: 'doctor';
+      scope: 'current' | 'all' | ModelProvider;
+    }
+  | {
       kind: 'invalid';
       reason: string;
     };
@@ -475,6 +479,17 @@ export function parseModelsRequest(entry: string): ModelsRequest {
   }
 
   const mode = remaining[0]?.toLowerCase();
+  if (mode === 'doctor' || mode === 'check') {
+    if (remaining.length !== 1) {
+      return { kind: 'invalid', reason: 'Use /models [current|all|provider] doctor.' };
+    }
+
+    return {
+      kind: 'doctor',
+      scope,
+    };
+  }
+
   if (mode === 'search' || mode === 'find') {
     const query = remaining.slice(1).join(' ').trim();
     if (!query) {
@@ -490,7 +505,7 @@ export function parseModelsRequest(entry: string): ModelsRequest {
 
   return {
     kind: 'invalid',
-    reason: 'Use /models, /models all, /models <ollama|openai|codex>, or /models [current|all|provider] search <query>.',
+    reason: 'Use /models, /models all, /models <ollama|openai|codex>, /models [current|all|provider] search <query>, or /models [current|all|provider] doctor.',
   };
 }
 

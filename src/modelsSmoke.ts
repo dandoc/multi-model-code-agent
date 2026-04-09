@@ -1,4 +1,4 @@
-import { describeModelFamily, renderModelCatalogs } from './providerModels.js';
+import { describeModelFamily, renderModelCatalogs, renderModelDiagnostics } from './providerModels.js';
 
 import type { AgentConfig } from './types.js';
 
@@ -54,6 +54,70 @@ async function main(): Promise<void> {
   assert(
     missingMatches.includes('- (no models matched this filter)'),
     'Expected model search output to explain when a filter matched no models.'
+  );
+
+  const doctorAll = await renderModelDiagnostics(config, 'all', {
+    probeOllama: async () => ({
+      available: true,
+      detail: 'The local `ollama list` command responded successfully.',
+      models: ['qwen3-coder:30b', 'qwen2.5-coder:7b'],
+    }),
+    probeOpenAI: async () => ({
+      reachable: false,
+      detail: 'The OpenAI-compatible /models request failed with 401.',
+      models: [],
+    }),
+    probeCodex: async () => ({
+      available: true,
+      loggedIn: true,
+      detail: 'Logged in via ChatGPT',
+    }),
+  });
+  assert(
+    doctorAll.includes('mode         doctor') &&
+      doctorAll.includes('provider     ollama') &&
+      doctorAll.includes('provider     openai') &&
+      doctorAll.includes('provider     codex'),
+    'Expected model doctor output to render one section per provider.'
+  );
+  assert(
+    doctorAll.includes('status       blocked') &&
+      doctorAll.includes('API key'),
+    'Expected OpenAI doctor output to explain missing API key failures.'
+  );
+
+  const doctorCurrent = await renderModelDiagnostics(config, 'current', {
+    probeOllama: async () => ({
+      available: true,
+      detail: 'The local `ollama list` command responded successfully.',
+      models: ['qwen3-coder:30b'],
+    }),
+  });
+  assert(
+      doctorCurrent.includes('status       ready') &&
+      doctorCurrent.includes('installed models'),
+    'Expected current-provider doctor output to show a ready Ollama installation.'
+  );
+
+  const invalidOpenAiDoctor = await renderModelDiagnostics(
+    {
+      ...config,
+      provider: 'openai',
+      model: '',
+      baseUrl: '',
+      apiKey: 'test-key',
+    },
+    'current',
+    {
+      probeOpenAI: async () => {
+        throw new Error('The OpenAI probe should not run when the base URL is missing.');
+      },
+    }
+  );
+  assert(
+    invalidOpenAiDoctor.includes('Skipped the live /models probe') &&
+      invalidOpenAiDoctor.includes('status       blocked'),
+    'Expected OpenAI doctor output to skip live probing when the base URL is invalid.'
   );
 
   console.log('[models-smoke] All model catalog checks passed.');

@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
+import { getCodexLoginStatus } from './modelAdapters.js';
 import type { AgentConfig, ModelProvider } from './types.js';
 
 const execFileAsync = promisify(execFile);
@@ -15,6 +16,44 @@ type ProviderModelCatalog = {
 
 type RenderCatalogOptions = {
   query?: string;
+};
+
+type DiagnosticLevel = 'ok' | 'warn' | 'error' | 'info';
+type DiagnosticStatus = 'ready' | 'warning' | 'blocked';
+
+type DiagnosticCheck = {
+  level: DiagnosticLevel;
+  label: string;
+  detail: string;
+  hint?: string;
+};
+
+type ProviderDiagnostics = {
+  provider: ModelProvider;
+  currentModel: string;
+  baseUrl: string;
+  status: DiagnosticStatus;
+  checks: DiagnosticCheck[];
+};
+
+type OllamaProbeResult = {
+  available: boolean;
+  detail: string;
+  models: string[];
+};
+
+type OpenAIProbeResult = {
+  reachable: boolean;
+  detail: string;
+  models: string[];
+};
+
+type CodexProbeResult = Awaited<ReturnType<typeof getCodexLoginStatus>>;
+
+type ProviderDiagnosticDeps = {
+  probeOllama?: () => Promise<OllamaProbeResult>;
+  probeOpenAI?: (baseUrl: string, apiKey: string) => Promise<OpenAIProbeResult>;
+  probeCodex?: (config: AgentConfig) => Promise<CodexProbeResult>;
 };
 
 function getOllamaCommand(): string {
@@ -200,6 +239,35 @@ async function listOllamaModels(): Promise<{ models: string[]; notes: string[] }
   }
 }
 
+async function probeOllamaAvailability(): Promise<OllamaProbeResult> {
+  try {
+    const { stdout } = await execFileAsync(getOllamaCommand(), ['list'], {
+      windowsHide: true,
+      timeout: 15_000,
+    });
+    const models = stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(1)
+      .map((line) => line.split(/\s+/)[0])
+      .filter(Boolean);
+
+    return {
+      available: true,
+      detail: 'The local `ollama list` command responded successfully.',
+      models,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      available: false,
+      detail: `Could not run \`ollama list\`: ${message}`,
+      models: [],
+    };
+  }
+}
+
 async function listOpenAIModels(baseUrl: string, apiKey: string | undefined): Promise<{ models: string[]; notes: string[] }> {
   if (!apiKey) {
     return {
@@ -248,6 +316,49 @@ async function listOpenAIModels(baseUrl: string, apiKey: string | undefined): Pr
   }
 }
 
+async function probeOpenAIEndpoint(baseUrl: string, apiKey: string): Promise<OpenAIProbeResult> {
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/models`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: AbortSignal.timeout(20_000),
+    });
+
+    if (!response.ok) {
+      return {
+        reachable: false,
+        detail: `The OpenAI-compatible /models request failed with ${response.status}.`,
+        models: [],
+      };
+    }
+
+    const payload = (await response.json()) as {
+      data?: Array<{
+        id?: unknown;
+      }>;
+    };
+
+    const models = (payload.data ?? [])
+      .map((item) => (typeof item.id === 'string' ? item.id : ''))
+      .filter(Boolean)
+      .sort((left, right) => left.localeCompare(right));
+
+    return {
+      reachable: true,
+      detail: 'The OpenAI-compatible /models endpoint responded successfully.',
+      models,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      reachable: false,
+      detail: `Could not reach the OpenAI-compatible /models endpoint: ${message}`,
+      models: [],
+    };
+  }
+}
+
 function listCodexModels(currentModel: string): { models: string[]; notes: string[] } {
   const models = ['(provider default)'];
   if (currentModel.trim()) {
@@ -268,6 +379,265 @@ function listCodexModels(currentModel: string): { models: string[]; notes: strin
       'Explicit model ids must be supported by your Codex account and CLI release.',
     ],
   };
+}
+
+function resolveProviderRuntime(
+  config: AgentConfig,
+  provider: ModelProvider
+): { model: string; baseUrl: string; apiKey?: string } {
+  if (config.provider === provider) {
+    return {
+      model: config.model,
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+    };
+  }
+
+  return {
+    model: resolveStoredModelForProvider(provider, process.env, { allowLegacy: false }),
+    baseUrl:
+      provider === 'codex'
+        ? ''
+        : (process.env[providerBaseUrlEnvKey(provider) ?? ''] ?? providerDefaultBaseUrl(provider)),
+    apiKey: provider === 'openai' ? process.env.OPENAI_API_KEY || undefined : undefined,
+  };
+}
+
+function pushDiagnostic(
+  checks: DiagnosticCheck[],
+  level: DiagnosticLevel,
+  label: string,
+  detail: string,
+  hint?: string
+): void {
+  checks.push({ level, label, detail, hint });
+}
+
+function computeDiagnosticStatus(checks: DiagnosticCheck[]): DiagnosticStatus {
+  if (checks.some((check) => check.level === 'error')) {
+    return 'blocked';
+  }
+
+  if (checks.some((check) => check.level === 'warn')) {
+    return 'warning';
+  }
+
+  return 'ready';
+}
+
+function isLikelyHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value.trim());
+}
+
+async function buildProviderDiagnostics(
+  config: AgentConfig,
+  provider: ModelProvider,
+  deps: ProviderDiagnosticDeps = {}
+): Promise<ProviderDiagnostics> {
+  const runtime = resolveProviderRuntime(config, provider);
+  const currentModel = runtime.model.trim();
+  const baseUrl = runtime.baseUrl.trim();
+  const checks: DiagnosticCheck[] = [];
+
+  if (currentModel && !isModelCompatible(provider, currentModel)) {
+    pushDiagnostic(
+      checks,
+      'error',
+      'model compatibility',
+      `The configured model "${currentModel}" does not look compatible with provider ${provider}.`,
+      'Use /models to inspect compatible choices or /model default to reset.'
+    );
+  } else if (!currentModel && provider !== 'codex') {
+    const blankModelDetail =
+      provider === 'openai'
+          ? 'No explicit model is set for the OpenAI-compatible provider.'
+          : `No explicit model is set, so the default recommendation (${providerDefaultModel(provider)}) will be used.`;
+    pushDiagnostic(
+      checks,
+      provider === 'openai' ? 'warn' : 'info',
+      'model selection',
+      blankModelDetail,
+      provider === 'openai' ? 'Set /model <name> before running requests against an OpenAI-compatible endpoint.' : undefined
+    );
+  } else if (provider !== 'codex') {
+    pushDiagnostic(checks, 'ok', 'model selection', `Configured model: ${currentModel}`);
+  }
+
+  if (provider === 'ollama') {
+    if (!baseUrl) {
+      pushDiagnostic(
+        checks,
+        'error',
+        'base URL',
+        'No Ollama base URL is configured.',
+        `Set /base-url ${providerDefaultBaseUrl('ollama')} or update OLLAMA_BASE_URL.`
+      );
+    } else if (!isLikelyHttpUrl(baseUrl)) {
+      pushDiagnostic(
+        checks,
+        'error',
+        'base URL',
+        `The Ollama base URL "${baseUrl}" does not look like an http(s) endpoint.`,
+        'Use a URL like http://127.0.0.1:11434.'
+      );
+    } else {
+      pushDiagnostic(checks, 'ok', 'base URL', `Using Ollama base URL ${baseUrl}.`);
+    }
+
+    const probe = await (deps.probeOllama ?? probeOllamaAvailability)();
+    if (!probe.available) {
+      pushDiagnostic(
+        checks,
+        'error',
+        'local CLI',
+        probe.detail,
+        'Install Ollama and confirm `ollama list` works in this shell.'
+      );
+    } else {
+      pushDiagnostic(checks, 'ok', 'local CLI', probe.detail);
+      const expectedModel = currentModel || providerDefaultModel('ollama');
+      if (expectedModel && !probe.models.includes(expectedModel)) {
+        pushDiagnostic(
+          checks,
+          'warn',
+          'installed models',
+          `The expected Ollama model "${expectedModel}" is not present in the local list.`,
+          `Run \`ollama pull ${expectedModel}\` or switch to one of the installed models with /model.`
+        );
+      } else if (expectedModel) {
+        pushDiagnostic(checks, 'ok', 'installed models', `The expected Ollama model "${expectedModel}" is installed locally.`);
+      }
+    }
+  } else if (provider === 'openai') {
+    if (!baseUrl) {
+      pushDiagnostic(
+        checks,
+        'error',
+        'base URL',
+        'No OpenAI-compatible base URL is configured.',
+        'Set /base-url <https://your-endpoint/v1> before using the openai provider.'
+      );
+    } else if (!isLikelyHttpUrl(baseUrl)) {
+      pushDiagnostic(
+        checks,
+        'error',
+        'base URL',
+        `The OpenAI-compatible base URL "${baseUrl}" does not look like an http(s) endpoint.`,
+        'Use a URL like https://api.openai.com/v1 or your compatible provider URL.'
+      );
+    } else {
+      pushDiagnostic(checks, 'ok', 'base URL', `Using OpenAI-compatible base URL ${baseUrl}.`);
+    }
+
+    const baseUrlLooksValid = Boolean(baseUrl) && isLikelyHttpUrl(baseUrl);
+
+    if (!runtime.apiKey) {
+      pushDiagnostic(
+        checks,
+        'error',
+        'API key',
+        'No API key is configured for the OpenAI-compatible provider.',
+        'Set OPENAI_API_KEY in .env or use /api-key <value> for the current session.'
+      );
+    } else {
+      pushDiagnostic(checks, 'ok', 'API key', 'An API key is configured for the OpenAI-compatible provider.');
+      if (!baseUrlLooksValid) {
+        pushDiagnostic(
+          checks,
+          'warn',
+          'live endpoint',
+          'Skipped the live /models probe because the configured base URL is missing or invalid.',
+          'Fix the base URL first, then re-run /models doctor.'
+        );
+      } else {
+        const probe = await (deps.probeOpenAI ?? probeOpenAIEndpoint)(baseUrl, runtime.apiKey);
+        if (!probe.reachable) {
+          pushDiagnostic(
+            checks,
+            'warn',
+            'live endpoint',
+            probe.detail,
+            'A 401/403 usually means the API key is missing or invalid; connection errors often mean the base URL is wrong.'
+          );
+        } else {
+          pushDiagnostic(checks, 'ok', 'live endpoint', probe.detail);
+          if (currentModel && probe.models.length > 0 && !probe.models.includes(currentModel)) {
+            pushDiagnostic(
+              checks,
+              'warn',
+              'live model list',
+              `The configured model "${currentModel}" was not found in the live /models response.`,
+              'Use /models openai to inspect the live model list or switch the configured model.'
+            );
+          } else if (currentModel && probe.models.length > 0) {
+            pushDiagnostic(checks, 'ok', 'live model list', `The configured model "${currentModel}" appears in the live /models response.`);
+          }
+        }
+      }
+    }
+  } else {
+    const probe = await (deps.probeCodex ?? getCodexLoginStatus)(config);
+    if (!probe.available) {
+      pushDiagnostic(
+        checks,
+        'error',
+        'Codex CLI',
+        probe.detail,
+        'Install the Codex CLI and make sure `codex` is available in this shell.'
+      );
+    } else if (!probe.loggedIn) {
+      pushDiagnostic(
+        checks,
+        'error',
+        'ChatGPT login',
+        probe.detail,
+        'Run `codex login` and verify `codex login status` before using the codex provider.'
+      );
+    } else {
+      pushDiagnostic(checks, 'ok', 'ChatGPT login', 'Codex CLI is available and login status looks healthy.');
+    }
+
+    pushDiagnostic(
+      checks,
+      currentModel ? 'ok' : 'info',
+      'model selection',
+      currentModel
+        ? `Codex will request the explicit model "${currentModel}".`
+        : 'No explicit Codex model is set, so the account default will be used.'
+    );
+  }
+
+  return {
+    provider,
+    currentModel,
+    baseUrl,
+    status: computeDiagnosticStatus(checks),
+    checks,
+  };
+}
+
+function renderProviderDiagnostics(diagnostics: ProviderDiagnostics): string {
+  const lines = [
+    `provider     ${diagnostics.provider}`,
+    'mode         doctor',
+    `status       ${diagnostics.status}`,
+    `current      ${currentModelLabel(diagnostics.currentModel)}`,
+  ];
+
+  if (diagnostics.provider !== 'codex') {
+    lines.push(`baseUrl      ${diagnostics.baseUrl || '(not set)'}`);
+  }
+
+  lines.push('checks');
+  for (const check of diagnostics.checks) {
+    const prefix = `${check.level.padEnd(5)} ${check.label}`;
+    lines.push(`- ${prefix}: ${check.detail}`);
+    if (check.hint) {
+      lines.push(`  hint: ${check.hint}`);
+    }
+  }
+
+  return lines.join('\n');
 }
 
 async function buildCatalog(config: AgentConfig, provider: ModelProvider): Promise<ProviderModelCatalog> {
@@ -348,4 +718,17 @@ export async function renderModelCatalogs(
     scope === 'all' ? ['ollama', 'openai', 'codex'] : [scope === 'current' ? config.provider : scope];
   const catalogs = await Promise.all(providers.map((provider) => buildCatalog(config, provider)));
   return catalogs.map((catalog) => renderCatalog(catalog, options)).join('\n\n');
+}
+
+export async function renderModelDiagnostics(
+  config: AgentConfig,
+  scope: 'current' | 'all' | ModelProvider,
+  deps: ProviderDiagnosticDeps = {}
+): Promise<string> {
+  const providers: ModelProvider[] =
+    scope === 'all' ? ['ollama', 'openai', 'codex'] : [scope === 'current' ? config.provider : scope];
+  const diagnostics = await Promise.all(
+    providers.map((provider) => buildProviderDiagnostics(config, provider, deps))
+  );
+  return diagnostics.map((entry) => renderProviderDiagnostics(entry)).join('\n\n');
 }
