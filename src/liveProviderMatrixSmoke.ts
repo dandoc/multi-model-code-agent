@@ -1,6 +1,6 @@
 import { renderLiveProviderSmokeResults, runLiveProviderSmoke } from './liveProviderMatrix.js';
 
-import type { AgentConfig, ModelProvider } from './types.js';
+import type { AgentConfig, ChatMessage, ModelProvider } from './types.js';
 import type { ProviderDiagnostics } from './providerModels.js';
 
 function assert(condition: unknown, message: string): void {
@@ -56,13 +56,16 @@ async function main(): Promise<void> {
     },
   ];
 
-  const results = await runLiveProviderSmoke(config, 'all', {
+  const results = await runLiveProviderSmoke(config, 'all', 'all', {
     collectDiagnostics: async () => diagnostics,
     targetConfigFactory: (_config, provider) => createConfig(provider),
     adapterFactory: (targetConfig) => ({
       provider: targetConfig.provider,
-      complete: async () => {
+      complete: async (messages: ChatMessage[]) => {
         if (targetConfig.provider === 'ollama') {
+          if (messages[0]?.content.includes('JSON object')) {
+            return '{"type":"message","message":"OK"}';
+          }
           return 'OK';
         }
         if (targetConfig.provider === 'codex') {
@@ -84,7 +87,15 @@ async function main(): Promise<void> {
 
   const ollama = results.find((result) => result.provider === 'ollama');
   assert(ollama?.status === 'passed', 'Expected Ollama live smoke to pass.');
-  assert(ollama?.replyPreview === 'OK', `Expected Ollama reply preview to be OK, got ${ollama?.replyPreview}.`);
+  assert(ollama?.checks.length === 2, 'Expected Ollama live smoke to run both quick and protocol checks.');
+  assert(
+    ollama?.checks.some((check) => check.name === 'quick' && check.status === 'passed' && check.replyPreview === 'OK'),
+    'Expected Ollama quick smoke to return an OK preview.'
+  );
+  assert(
+    ollama?.checks.some((check) => check.name === 'protocol' && check.status === 'passed'),
+    'Expected Ollama protocol smoke to parse the structured message envelope.'
+  );
 
   const openai = results.find((result) => result.provider === 'openai');
   assert(openai?.status === 'blocked', 'Expected OpenAI live smoke to be blocked by readiness checks.');
@@ -96,8 +107,30 @@ async function main(): Promise<void> {
   const codex = results.find((result) => result.provider === 'codex');
   assert(codex?.status === 'failed', 'Expected Codex live smoke to surface adapter failures.');
   assert(
-    codex?.summary.includes('시간 안에 끝나지'),
+    codex?.summary.includes('시간') || codex?.summary.toLowerCase().includes('timeout'),
     `Expected Codex failure summary to mention timeout guidance, got ${codex?.summary}.`
+  );
+
+  const protocolOnly = await runLiveProviderSmoke(config, 'current', 'protocol', {
+    collectDiagnostics: async () => diagnostics.slice(0, 1),
+    targetConfigFactory: (_config, provider) => createConfig(provider),
+    adapterFactory: (targetConfig) => ({
+      provider: targetConfig.provider,
+      complete: async () => '{"type":"message","message":"WRONG"}',
+    }),
+    now: (() => {
+      let current = 5_000;
+      return () => {
+        current += 100;
+        return current;
+      };
+    })(),
+  });
+  assert(
+    protocolOnly[0]?.status === 'failed' &&
+      protocolOnly[0]?.checks[0]?.name === 'protocol' &&
+      protocolOnly[0]?.checks[0]?.detailLines.some((line) => line.includes('Parsed message: WRONG')),
+    'Expected protocol-only smoke to fail when the parsed JSON message does not match OK.'
   );
 
   const rendered = renderLiveProviderSmokeResults(results);
@@ -109,10 +142,11 @@ async function main(): Promise<void> {
     'Expected rendered live smoke output to show per-provider smoke statuses.'
   );
   assert(
-    rendered.includes('reply        OK') &&
-      rendered.includes('Skipped live request because readiness checks') &&
-      rendered.includes('details'),
-    'Expected rendered live smoke output to show reply previews and blocking/failure details.'
+    rendered.includes('checks') &&
+      rendered.includes('quick') &&
+      rendered.includes('protocol') &&
+      rendered.includes('reply: OK'),
+    'Expected rendered live smoke output to show per-check results and reply previews.'
   );
 
   console.log('[live-provider-matrix-smoke] All live smoke matrix checks passed.');

@@ -141,7 +141,7 @@ npm run dev
 - `/models [current|all|provider]` shows model choices
 - `/models [current|all|provider] search <query>` filters model names and shows family hints
 - `/models [current|all|provider] doctor` checks provider readiness and common failure causes
-- `/models [current|all|provider] smoke` runs a tiny live completion check for the selected provider scope
+- `/models [current|all|provider] smoke [quick|protocol|all]` runs live provider checks for plain replies and/or structured JSON envelopes
 - `/base-url <url>` persists to `.env`
 - `/api-key <value>`
 - `/workdir <path>`
@@ -296,7 +296,8 @@ Inside the REPL you can inspect model choices with:
 /models doctor
 /models all doctor
 /models smoke
-/models all smoke
+/models all smoke protocol
+/models codex smoke quick
 ```
 
 Behavior by provider:
@@ -322,9 +323,9 @@ Doctor behavior:
 
 Live smoke behavior:
 
-- `/models ... smoke` runs a tiny real completion request (`Reply with exactly OK.`) through the selected provider scope
+- `/models ... smoke [quick|protocol|all]` can check a plain `OK` reply, a structured JSON/message envelope, or both in one pass
 - providers with obvious blocking readiness issues are skipped before the live request runs, and the output shows why
-- use `npm run smoke:live -- current`, `npm run smoke:live -- all`, or `npm run smoke:live -- codex` for the same live matrix outside the REPL
+- use `npm run smoke:live -- current`, `npm run smoke:live -- all protocol`, or `npm run smoke:live -- codex quick` for the same live matrix outside the REPL
 - `/profiles load` and `/resume runtime` fold the same preflight into their preview/confirm flow before they reset the conversation
 
 Session tuning:

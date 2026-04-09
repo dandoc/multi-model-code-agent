@@ -151,8 +151,8 @@ function printReplHelp(): void {
       '                       Filter available model names and show family hints',
       '  /models [scope] doctor',
       '                       Diagnose provider readiness and common failure causes',
-      '  /models [scope] smoke',
-      '                       Run a small live completion smoke for the selected provider scope',
+      '  /models [scope] smoke [quick|protocol|all]',
+      '                       Run live provider smoke checks for plain replies and/or structured JSON envelopes',
       '  /base-url <url>       Switch base URL and save it to .env',
       '  /api-key <value>      Set API key for this session',
       '  /workdir <path>       Change workdir',
@@ -1042,7 +1042,7 @@ async function main(): Promise<void> {
         }
 
         if (request.kind === 'smoke') {
-          console.log(`\n${renderLiveProviderSmokeResults(await runLiveProviderSmoke(config, request.scope))}`);
+          console.log(`\n${renderLiveProviderSmokeResults(await runLiveProviderSmoke(config, request.scope, request.mode))}`);
           continue;
         }
 

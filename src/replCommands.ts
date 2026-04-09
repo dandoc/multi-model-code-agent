@@ -174,6 +174,7 @@ export type ModelsRequest =
   | {
       kind: 'smoke';
       scope: 'current' | 'all' | ModelProvider;
+      mode: 'quick' | 'protocol' | 'all';
     }
   | {
       kind: 'invalid';
@@ -514,14 +515,26 @@ export function parseModelsRequest(entry: string): ModelsRequest {
   }
 
   if (mode === 'smoke') {
-    if (remaining.length !== 1) {
-      return { kind: 'invalid', reason: 'Use /models [current|all|provider] smoke.' };
+    if (remaining.length === 1) {
+      return {
+        kind: 'smoke',
+        scope,
+        mode: 'all',
+      };
     }
 
-    return {
-      kind: 'smoke',
-      scope,
-    };
+    if (remaining.length === 2) {
+      const smokeMode = remaining[1]?.toLowerCase();
+      if (smokeMode === 'quick' || smokeMode === 'protocol' || smokeMode === 'all') {
+        return {
+          kind: 'smoke',
+          scope,
+          mode: smokeMode,
+        };
+      }
+    }
+
+    return { kind: 'invalid', reason: 'Use /models [current|all|provider] smoke [quick|protocol|all].' };
   }
 
   if (mode === 'search' || mode === 'find') {
@@ -539,7 +552,7 @@ export function parseModelsRequest(entry: string): ModelsRequest {
 
   return {
     kind: 'invalid',
-    reason: 'Use /models, /models all, /models <ollama|openai|codex>, /models [current|all|provider] search <query>, /models [current|all|provider] doctor, or /models [current|all|provider] smoke.',
+    reason: 'Use /models, /models all, /models <ollama|openai|codex>, /models [current|all|provider] search <query>, /models [current|all|provider] doctor, or /models [current|all|provider] smoke [quick|protocol|all].',
   };
 }
 

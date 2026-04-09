@@ -313,14 +313,30 @@ async function main(): Promise<void> {
 
   const modelsCurrentSmoke = parseModelsRequest('/models smoke');
   assert(
-    modelsCurrentSmoke.kind === 'smoke' && modelsCurrentSmoke.scope === 'current',
+    modelsCurrentSmoke.kind === 'smoke' && modelsCurrentSmoke.scope === 'current' && modelsCurrentSmoke.mode === 'all',
     'Expected /models smoke to target the current provider.'
   );
 
   const modelsProviderSmoke = parseModelsRequest('/models codex smoke');
   assert(
-    modelsProviderSmoke.kind === 'smoke' && modelsProviderSmoke.scope === 'codex',
+    modelsProviderSmoke.kind === 'smoke' && modelsProviderSmoke.scope === 'codex' && modelsProviderSmoke.mode === 'all',
     'Expected /models <provider> smoke to parse correctly.'
+  );
+
+  const modelsProtocolSmoke = parseModelsRequest('/models all smoke protocol');
+  assert(
+    modelsProtocolSmoke.kind === 'smoke' &&
+      modelsProtocolSmoke.scope === 'all' &&
+      modelsProtocolSmoke.mode === 'protocol',
+    'Expected /models all smoke protocol to parse correctly.'
+  );
+
+  const modelsQuickSmoke = parseModelsRequest('/models ollama smoke quick');
+  assert(
+    modelsQuickSmoke.kind === 'smoke' &&
+      modelsQuickSmoke.scope === 'ollama' &&
+      modelsQuickSmoke.mode === 'quick',
+    'Expected /models <provider> smoke quick to parse correctly.'
   );
 
   const modelsInvalid = parseModelsRequest('/models current search');
@@ -339,6 +355,12 @@ async function main(): Promise<void> {
   assert(
     modelsSmokeInvalid.kind === 'invalid',
     'Expected malformed /models smoke syntax to be rejected.'
+  );
+
+  const modelsSmokeTooManyArgs = parseModelsRequest('/models codex smoke protocol extra');
+  assert(
+    modelsSmokeTooManyArgs.kind === 'invalid',
+    'Expected malformed /models smoke with extra args to be rejected.'
   );
 
   const temperatureUpdate = parseTemperatureRequest('/temperature 0.7');

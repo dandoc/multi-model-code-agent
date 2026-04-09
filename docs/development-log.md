@@ -663,8 +663,8 @@ Summary:
 - provider/model/base-url switches now run a quick runtime preflight and surface readiness warnings before resetting the conversation
 - `/profiles load` and `/resume runtime` now include the same preflight in their preview/confirm flow, so missing keys, missing local models, or missing Codex login show up before the runtime is applied
 - saved profiles and runtime-aware resume now preserve the effective request-timeout setting as part of the runtime snapshot
-- `/models ... smoke` now runs a tiny live completion matrix and skips providers that already fail blocking readiness checks
-- added `npm run smoke:live` for manual live provider checks and `npm run smoke:live-matrix` for a non-live regression harness that is folded into the default smoke chain
+- `/models ... smoke [quick|protocol|all]` now checks both a plain live completion path and a structured JSON/message-envelope path, while still skipping providers that already fail blocking readiness checks
+- added `npm run smoke:live -- <scope> [quick|protocol|all]` for manual live provider checks and `npm run smoke:live-matrix` for a non-live regression harness that is folded into the default smoke chain
 - `parseAgentEnvelope()` now normalizes more real-world response shapes, including stringified arguments, OpenAI-style `function_call` / `tool_calls`, jsonc-style fenced payloads, trailing commas, and single-item JSON arrays
 - added `npm run smoke:json-protocol` and folded it into the default smoke chain to lock in those response-normalization paths
 - profiles intentionally exclude API keys so secrets stay session-local
