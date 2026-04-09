@@ -1,55 +1,91 @@
 # Claude Code Inspiration
 
-## 한 줄 요약
+## Why this document exists
 
-이 프로젝트는 Claude Code 유출 스냅샷을 직접 수정하거나 복제한 저장소가 아니다. Claude Code에서 보이는 구조적 아이디어를 참고해서 새로 만든 독립 TypeScript CLI 프로젝트다.
+This project did not appear out of nowhere. It grew out of a larger effort to study the methodology visible in Claude Code's source and workflow, then test those ideas in a separate codebase that is free to target many different LLMs.
 
-## 왜 Claude Code를 참고했는가
+The long-term goal is bigger than this CLI alone:
 
-사용자 목표는 "Claude Code 같은 사용감"을 가진 멀티 모델 코딩 에이전트를 만드는 것이다. 특히 로컬 모델과 원격 모델을 바꿔 끼우면서 코드 읽기, 검색, 수정, 명령 실행을 할 수 있는 구조가 필요했다.
+- understand which Claude Code ideas are genuinely strong
+- validate them through real implementation work
+- adapt them for local and remote model mixes
+- build a vibe-coding tool that can work well with many LLMs instead of depending on a single hosted model
 
-Claude Code 관련 자료를 본 이유는 "무엇을 분리해야 하는지"를 이해하기 위해서였다. 핵심은 제품 복제가 아니라 아키텍처 감각을 얻는 데 있었다.
+`multi-model-code-agent` is the hands-on CLI experiment inside that broader project.
 
-## 개념적으로 참고한 요소
+## What this project borrows
 
-- 모델 어댑터 분리
-  - 모델 공급자마다 호출 방식이 달라도 공통 인터페이스로 다루는 방식
-- 툴 중심 에이전트 루프
-  - 모델이 직접 파일 읽기, 검색, 수정, 셸 실행 같은 툴을 요청하고 결과를 다시 받는 흐름
-- 승인 기반 안전장치
-  - 위험한 수정과 셸 실행은 기본적으로 사람이 확인하도록 두는 방식
-- REPL 중심 사용감
-  - Claude Code처럼 터미널에서 짧게 질의하고 바로 실행하는 흐름
+The project borrows heavily from Claude Code at the methodological level.
 
-## 의도적으로 복사하지 않은 것
+The most important ideas are:
 
-- Claude Code 원본 소스 코드
-- Claude 전용 내부 프롬프트나 사내 통합 로직
-- 제품 고유의 비공개 동작
-- "Claude만을 위한" 공급자 종속 구조
+- REPL-first coding flow
+  - stay in one loop, ask questions, inspect files, edit, run commands, and continue iteratively
+- tool-driven agent loop
+  - let the model request explicit tools instead of pretending it already changed files
+- human approval for risky actions
+  - edits and command execution should be visible and confirmable by default
+- grounded repository analysis
+  - use deterministic helpers and file evidence so answers are tied to the actual repo
+- saved sessions and runtime ergonomics
+  - treat coding as an ongoing workflow, not a single prompt
 
-이 프로젝트는 처음부터 `Ollama`, `Qwen`, `Gemma`, `OpenAI-compatible` 계열을 염두에 두고 설계했다. 따라서 특정 벤더에 묶이지 않는 것이 중요한 원칙이다.
+These are the parts that felt worth studying and carrying forward.
 
-## 현재 저장소에서의 대응 관계
+## Why not copy Claude Code directly
 
-- `src/modelAdapters.ts`
-  - 모델 공급자를 바꿔 끼울 수 있는 어댑터 레이어
-- `src/tools.ts`
-  - `list_files`, `read_file`, `read_multiple_files`, `search_files`, `write_patch`, `run_shell` 같은 작업 툴
-- `src/agent.ts`
-  - 모델 응답과 툴 실행을 반복하는 에이전트 루프
-- `src/prompt.ts`
-  - 툴 사용 규칙과 JSON 응답 계약
-- `src/index.ts`
-  - CLI/REPL 진입점
+The point of this repository is not to recreate Claude Code source code line by line.
 
-## 왜 클린룸 방식으로 가는가
+That would be the wrong goal for this project for several reasons:
 
-- 법적, 윤리적 리스크를 낮출 수 있다
-- 구조를 더 쉽게 이해할 수 있다
-- 여러 모델을 지원하는 방향으로 자유롭게 확장하기 쉽다
-- 초보자 입장에서 "어떤 계층이 왜 필요한지"를 직접 배울 수 있다
+- the target environment here is different
+  - this project needs to work with `Ollama`, `OpenAI-compatible` backends, and `Codex CLI`
+- local models behave differently from larger hosted models
+  - `Qwen`, `Gemma`, and other local-model paths need extra grounding, normalization, and recovery logic
+- the design goal is portability
+  - the architecture should survive backend swaps and model churn
+- the implementation needs to stay understandable and adaptable
+  - the project is as much a research and validation effort as it is a working tool
 
-## 현재 결론
+So the project borrows workflow ideas, safety patterns, and interaction design, then re-implements them in a way that matches its own constraints.
 
-이 프로젝트는 "Claude Code를 베낀 구현"이 아니라 "Claude Code 스타일의 사용 경험과 구조를 참고해, 멀티 모델 코딩 에이전트를 새로 만드는 작업"으로 보는 것이 정확하다.
+## What is intentionally different here
+
+This CLI intentionally focuses on problems that become more important once the backing model is not fixed.
+
+Examples:
+
+- pluggable provider adapters
+  - `Ollama`, `OpenAI-compatible`, and `Codex CLI`
+- provider-specific failure diagnosis and retry rules
+- runtime preflight checks before switching provider, model, or profile
+- response normalization for inconsistent model outputs
+- live smoke coverage for different provider paths
+- session and profile flows that are explicit about runtime state
+
+These are not side details. They are central to the goal of making the tool work across many model families.
+
+## The broader project goal
+
+The broader project can be summarized like this:
+
+1. Study Claude Code's methodology seriously.
+2. Implement the useful parts in a separate codebase.
+3. Test them against real day-to-day coding work.
+4. Keep the pieces that still work when the model changes.
+5. Use that learning to build a stronger multi-LLM vibe-coding tool.
+
+From that perspective, this CLI is not the whole destination. It is one concrete deliverable inside a larger research-and-build effort.
+
+## Current practical interpretation
+
+The best short description of this repository is:
+
+> a Claude Code inspired, multi-model coding-agent CLI used to research and validate how to build a vibe-coding tool that works well across many LLMs
+
+That means the project is:
+
+- inspired by Claude Code's methods
+- implemented independently
+- optimized for multi-model portability
+- used as a real development testbed instead of a purely theoretical experiment

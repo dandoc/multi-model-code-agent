@@ -687,3 +687,16 @@ Validation:
 - `npm run smoke:sessions`
 - `npm run smoke:repl`
 - `npm run smoke:approvals`
+
+### 2026-04-10 - Project framing and inspiration docs refresh
+
+Summary:
+
+- clarified in `README.md` that this CLI is part of a broader effort to study Claude Code's methodology and turn that research into a multi-LLM vibe-coding tool
+- rewrote `docs/claude-code-inspiration.md` so it clearly explains what this project borrows methodologically, why it does not copy Claude Code directly, and why multi-model portability is the main goal
+- made the higher-level project framing explicit: this repository is the practical CLI testbed inside that broader research-and-build effort
+
+Validation:
+
+- doc-only change
+- `npm run smoke:packaging`

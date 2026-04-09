@@ -2,6 +2,18 @@
 
 `multi-model-code-agent` is a small TypeScript CLI that gives you a Claude Code style workflow with pluggable backends.
 
+This repository is part of a broader project: study the methodology visible in Claude Code's source and workflow, adapt the parts that are genuinely useful, and turn that research into a vibe-coding tool that can work well across many different LLMs instead of being tied to one model or one vendor. The CLI in this repo is the practical testbed for that goal.
+
+In other words, the project intentionally borrows many methodological ideas from Claude Code, especially around:
+
+- a REPL-first coding workflow
+- a tool-driven agent loop
+- human approval around risky actions
+- grounded repository analysis instead of pure model guesswork
+- saved sessions, runtime switching, and iterative coding ergonomics
+
+At the same time, the implementation here is not trying to clone Claude Code line by line. It is a separate multi-model implementation shaped around `Ollama`, `OpenAI-compatible` backends, `Codex CLI`, local-model behavior, and the long-term goal of making one coding tool work reliably with many different LLMs.
+
 Current goals:
 
 - Use local models through `Ollama`
@@ -19,6 +31,8 @@ Current goals:
   - `run_files`
   - `run_shell`
 - Keep dangerous actions behind human approval by default
+- keep learning from Claude Code's methodology while validating which ideas still hold up when the backing model is not fixed
+- use this CLI as a concrete stepping stone toward a broader multi-LLM vibe-coding tool
 
 This is an MVP, so the focus is clarity and learnability over raw power.
 
