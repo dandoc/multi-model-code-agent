@@ -624,6 +624,23 @@ export class AgentRunner {
     return false;
   }
 
+  private isUnusableFinalMessage(message: string): boolean {
+    const cleaned = message.trim();
+    if (!cleaned) {
+      return true;
+    }
+
+    if (/^```(?:[A-Za-z0-9_-]+)?\s*```$/s.test(cleaned)) {
+      return true;
+    }
+
+    if (/^(?:\.\.\.|…+)$/u.test(cleaned)) {
+      return true;
+    }
+
+    return false;
+  }
+
   private looksLikeGenericRefusal(text: string): boolean {
     return /(?:i(?:'| a)m sorry|can't assist|cannot assist|can not assist|unable to assist|outside of the workspace|outside of the workspace root|outside the workspace|denied because)/i.test(
       text
@@ -699,6 +716,16 @@ export class AgentRunner {
       'The user asked for real files and folders inside the current workspace.',
       'Do not say the task is complete until you have successful write_patch tool results.',
       'Use write_patch now to create the requested files.',
+    ].join('\n');
+  }
+
+  private buildUnusableFinalResponseRetryInstruction(): string {
+    return [
+      'Your previous response was empty or unusable.',
+      'If you need a tool, return a valid JSON tool_call.',
+      'If you are ready to answer, return a JSON message with a non-empty plain-language answer.',
+      'Do not return placeholders like empty strings, empty code blocks, or just "...".',
+      'Base your answer only on real tool outputs already provided.',
     ].join('\n');
   }
 
@@ -1295,6 +1322,7 @@ export class AgentRunner {
     await this.maybeBootstrapConfigContext(userInput);
 
     let invalidResponseCount = 0;
+    let unusableResponseCount = 0;
     let ungroundedAnswerCount = 0;
     let styleRewriteCount = 0;
     let creationRefusalCount = 0;
@@ -1332,6 +1360,33 @@ export class AgentRunner {
               'If you need a tool, return a valid JSON tool_call.',
               'If you are ready to answer, return a JSON message with a plain-language answer based only on real tool outputs already provided.',
             ].join('\n'),
+          });
+          continue;
+        }
+
+        if (this.isUnusableFinalMessage(envelope.message)) {
+          unusableResponseCount += 1;
+          const fallback =
+            this.buildDeterministicFallback(userInput) ??
+            [
+              'The model kept returning empty or unusable answers.',
+              'Please retry the request or switch to a stronger model/provider if this keeps happening.',
+            ].join('\n');
+          if (unusableResponseCount >= 2) {
+            this.ui.log(
+              'Model kept returning empty or unusable final answers. Returning a corrective fallback.'
+            );
+            this.history.push({
+              role: 'assistant',
+              content: fallback,
+            });
+            return fallback;
+          }
+
+          this.ui.log('Model returned an empty or unusable final answer. Asking it to try again.');
+          this.history.push({
+            role: 'user',
+            content: this.buildUnusableFinalResponseRetryInstruction(),
           });
           continue;
         }

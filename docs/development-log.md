@@ -668,6 +668,7 @@ Summary:
 - added `npm run smoke:live -- <scope> [quick|protocol|all]` for manual live provider checks and `npm run smoke:live-matrix` for a non-live regression harness that is folded into the default smoke chain
 - `parseAgentEnvelope()` now normalizes more real-world response shapes, including stringified arguments, OpenAI-style `function_call` / `tool_calls`, jsonc-style fenced payloads, trailing commas, and single-item JSON arrays
 - added `npm run smoke:json-protocol` and folded it into the default smoke chain to lock in those response-normalization paths
+- the agent loop now retries once when a provider returns an empty or obviously placeholder-like final answer before falling back, with regression coverage for blank and `...`-style replies
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:

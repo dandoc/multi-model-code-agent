@@ -124,6 +124,56 @@ async function runWritePatchFailureGuardSmoke(): Promise<void> {
   });
 }
 
+async function runUnusableFinalResponseRecoverySmoke(): Promise<void> {
+  await withTempDir('mmca-empty-response-', async (tempRoot) => {
+    const emptyResponseAgent = new AgentRunner(
+      createConfig(tempRoot),
+      new SequenceAdapter([
+        JSON.stringify({
+          type: 'message',
+          message: '   ',
+        }),
+        JSON.stringify({
+          type: 'message',
+          message: 'Recovered answer.',
+        }),
+      ]),
+      [],
+      createSilentUi()
+    );
+
+    const emptyReply = await emptyResponseAgent.runTurn('Say hello briefly.');
+    assert(
+      emptyReply === 'Recovered answer.',
+      `Expected the agent to retry after an empty final answer.\n\nReply:\n${emptyReply}`
+    );
+
+    const placeholderResponseAgent = new AgentRunner(
+      createConfig(tempRoot),
+      new SequenceAdapter([
+        JSON.stringify({
+          type: 'message',
+          message: '...',
+        }),
+        JSON.stringify({
+          type: 'message',
+          message: 'Recovered after placeholder.',
+        }),
+      ]),
+      [],
+      createSilentUi()
+    );
+
+    const placeholderReply = await placeholderResponseAgent.runTurn('Say hello briefly.');
+    assert(
+      placeholderReply === 'Recovered after placeholder.',
+      `Expected the agent to retry after a placeholder final answer.\n\nReply:\n${placeholderReply}`
+    );
+
+    console.log('[regression-smoke] Empty/ellipsis final response recovery passed.');
+  });
+}
+
 async function runNonJsGroundingSmoke(): Promise<void> {
   await withTempDir('mmca-go-grounding-', async (tempRoot) => {
     await writeFile(path.join(tempRoot, 'go.mod'), 'module example.com/demo\n\ngo 1.22\n');
@@ -315,6 +365,7 @@ async function runWindowsTimeoutCleanupSmoke(): Promise<void> {
 
 async function main(): Promise<void> {
   await runWritePatchFailureGuardSmoke();
+  await runUnusableFinalResponseRecoverySmoke();
   await runNonJsGroundingSmoke();
   await runOneShotExitCodeSmoke();
   await runWindowsTimeoutCleanupSmoke();
