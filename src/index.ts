@@ -221,14 +221,14 @@ async function main(): Promise<void> {
     }
   };
 
-  const runPrompt = async (text: string): Promise<void> => {
+  const runPrompt = async (text: string): Promise<boolean> => {
     const runtimeAnswer = answerRuntimeConfigQuestion(text, config);
     console.log(`\n[user] ${text}`);
     await logSessionEvent(() => sessionStore.logMessage('user', text));
     if (runtimeAnswer) {
       console.log(`\n[assistant] ${runtimeAnswer}\n`);
       await logSessionEvent(() => sessionStore.logMessage('assistant', runtimeAnswer));
-      return;
+      return true;
     }
 
     try {
@@ -236,6 +236,7 @@ async function main(): Promise<void> {
       const reply = await agent.runTurn(text);
       console.log(`\n[assistant] ${reply}\n`);
       await logSessionEvent(() => sessionStore.logMessage('assistant', reply));
+      return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const failureReply = [
@@ -245,12 +246,16 @@ async function main(): Promise<void> {
       ].join('\n');
       console.log(`\n[assistant] ${failureReply}\n`);
       await logSessionEvent(() => sessionStore.logMessage('assistant', failureReply));
+      return false;
     }
   };
 
   try {
     if (parsed.prompt) {
-      await runPrompt(parsed.prompt);
+      const ok = await runPrompt(parsed.prompt);
+      if (!ok) {
+        process.exitCode = 1;
+      }
       return;
     }
 

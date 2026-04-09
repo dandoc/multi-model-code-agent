@@ -54,10 +54,97 @@ const CONFIG_KEYWORDS = [
   '\uC124\uC815 \uD30C\uC2F1',
 ];
 
+const FILE_REFERENCE_EXTENSIONS = new Set([
+  'ts',
+  'tsx',
+  'js',
+  'jsx',
+  'cjs',
+  'mjs',
+  'json',
+  'md',
+  'txt',
+  'toml',
+  'yaml',
+  'yml',
+  'sh',
+  'ps1',
+  'go',
+  'py',
+  'rs',
+  'java',
+  'cs',
+  'cpp',
+  'cc',
+  'cxx',
+  'c',
+  'h',
+  'hpp',
+  'hxx',
+  'html',
+  'css',
+  'scss',
+  'sql',
+  'proto',
+  'rb',
+  'php',
+  'swift',
+  'kt',
+  'kts',
+  'dart',
+  'lua',
+  'xml',
+  'gradle',
+  'lock',
+  'bat',
+  'cmd',
+]);
+
+const FILE_REFERENCE_MANIFESTS = new Set(
+  [
+    'package.json',
+    'package-lock.json',
+    'tsconfig.json',
+    'go.mod',
+    'go.sum',
+    'cargo.toml',
+    'cargo.lock',
+    'pyproject.toml',
+    'requirements.txt',
+    'pipfile',
+    'pipfile.lock',
+    'gemfile',
+    'gemfile.lock',
+    'pom.xml',
+    'build.gradle',
+    'build.gradle.kts',
+    'settings.gradle',
+    'settings.gradle.kts',
+    'makefile',
+    'dockerfile',
+    '.env',
+    '.env.example',
+    'compose.yaml',
+    'compose.yml',
+    'docker-compose.yml',
+    'docker-compose.yaml',
+    'readme.md',
+    'program.cs',
+  ].map((value) => value.toLowerCase())
+);
+
+const FILE_REFERENCE_TOKEN_PATTERN =
+  /(?:[A-Za-z]:)?(?:[A-Za-z0-9_.-]+[\\/])*[A-Za-z0-9_.-]+/g;
+
 interface AgentUI {
   confirm: (message: string) => Promise<boolean>;
   log: (message: string) => void;
 }
+
+type ToolExecutionRecord = {
+  tool: ToolDefinition['name'];
+  ok: boolean;
+};
 
 type EntrypointFlowSignals = {
   loadsDotEnv: boolean;
@@ -79,6 +166,7 @@ export class AgentRunner {
   private history: ChatMessage[] = [];
   private toolMap: Map<ToolDefinition['name'], ToolDefinition>;
   private bootstrapResults = new Map<ToolDefinition['name'], ToolExecutionResult>();
+  private currentTurnToolExecutions: ToolExecutionRecord[] = [];
 
   constructor(
     private config: AgentConfig,
@@ -100,11 +188,13 @@ export class AgentRunner {
   reset(): void {
     this.history = [];
     this.bootstrapResults.clear();
+    this.currentTurnToolExecutions = [];
   }
 
   replaceHistory(messages: ChatMessage[]): void {
     this.history = [...messages];
     this.bootstrapResults.clear();
+    this.currentTurnToolExecutions = [];
   }
 
   private buildMessages(): ChatMessage[] {
@@ -176,12 +266,7 @@ export class AgentRunner {
   }
 
   private countFileReferences(text: string): number {
-    const matches =
-      text.match(
-        /\b(?:[A-Za-z0-9_.-]+[\\/])*[A-Za-z0-9_.-]+\.(?:ts|tsx|js|jsx|json|md|yml|yaml|toml|txt|sh|ps1|cjs|mjs)\b/g
-      ) ?? [];
-
-    return new Set(matches).size;
+    return this.extractReferencedFilePaths(text).length;
   }
 
   private normalizeComparablePath(pathValue: string): string {
@@ -254,13 +339,66 @@ export class AgentRunner {
     return /빌립니다|빌려/i.test(text);
   }
 
-  private extractExplicitFilePaths(userInput: string): string[] {
-    const matches =
-      userInput.match(
-        /\b(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:ts|tsx|js|jsx|json|md|yml|yaml|toml|txt|sh|ps1|cjs|mjs)\b/g
-      ) ?? [];
+  private sanitizeFileToken(token: string): string {
+    return token
+      .trim()
+      .replace(/^[`"'(<[{]+/, '')
+      .replace(/[`"')>\]}.,:;!?]+$/, '');
+  }
 
-    return [...new Set(matches)];
+  private isKnownManifestPath(token: string): boolean {
+    const normalized = token.replace(/\\/g, '/').toLowerCase();
+    const leaf = normalized.split('/').pop() ?? normalized;
+    return FILE_REFERENCE_MANIFESTS.has(normalized) || FILE_REFERENCE_MANIFESTS.has(leaf);
+  }
+
+  private isLikelyFileReference(token: string): boolean {
+    const cleaned = this.sanitizeFileToken(token);
+    if (!cleaned) {
+      return false;
+    }
+
+    if (this.isKnownManifestPath(cleaned)) {
+      return true;
+    }
+
+    const normalized = cleaned.replace(/\\/g, '/');
+    const leaf = normalized.split('/').pop() ?? normalized;
+    const extensionMatch = /\.([A-Za-z0-9]+)$/.exec(leaf);
+    if (!extensionMatch) {
+      return false;
+    }
+
+    return FILE_REFERENCE_EXTENSIONS.has(extensionMatch[1].toLowerCase());
+  }
+
+  private extractReferencedFilePaths(text: string): string[] {
+    const matches = text.match(FILE_REFERENCE_TOKEN_PATTERN) ?? [];
+    return [
+      ...new Set(
+        matches
+          .map((token) => this.sanitizeFileToken(token))
+          .filter((token) => this.isLikelyFileReference(token))
+          .map((token) => token.replace(/\\/g, '/'))
+      ),
+    ];
+  }
+
+  private extractExplicitFilePaths(userInput: string): string[] {
+    return this.extractReferencedFilePaths(userInput);
+  }
+
+  private recordToolExecution(toolName: ToolDefinition['name'], result: ToolExecutionResult): void {
+    this.currentTurnToolExecutions.push({
+      tool: toolName,
+      ok: result.ok,
+    });
+  }
+
+  private countSuccessfulToolExecutions(toolName: ToolDefinition['name']): number {
+    return this.currentTurnToolExecutions.filter(
+      (record) => record.tool === toolName && record.ok
+    ).length;
   }
 
   private async executeTool(
@@ -273,30 +411,36 @@ export class AgentRunner {
       const approved = await this.ui.confirm(await this.buildApprovalMessage(tool, args));
 
       if (!approved) {
-        return {
+        const deniedResult = {
           ok: false,
           summary: `${tool.name} was denied by the user.`,
           output:
             'The user denied this tool call. Choose a safer alternative or explain what you need.',
         };
+        this.recordToolExecution(tool.name, deniedResult);
+        return deniedResult;
       }
     }
 
     this.ui.log(`Running ${tool.name}...`);
 
     try {
-      return await tool.run(args, {
+      const result = await tool.run(args, {
         config: this.config,
         confirm: this.ui.confirm,
         log: this.ui.log,
       });
+      this.recordToolExecution(tool.name, result);
+      return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return {
+      const failedResult = {
         ok: false,
         summary: `${tool.name} failed.`,
         output: message,
       };
+      this.recordToolExecution(tool.name, failedResult);
+      return failedResult;
     }
   }
 
@@ -541,12 +685,6 @@ export class AgentRunner {
 
       return pathValue && reasonValue ? [{ path: pathValue, reason: reasonValue }] : [];
     });
-  }
-
-  private countToolResults(toolName: ToolDefinition['name']): number {
-    return this.history.filter(
-      (message) => message.role === 'user' && message.content.includes(`TOOL RESULT: ${toolName}`)
-    ).length;
   }
 
   private looksLikeTaskCompletionClaim(text: string): boolean {
@@ -1145,6 +1283,7 @@ export class AgentRunner {
 
   async runTurn(userInput: string): Promise<string> {
     this.bootstrapResults.clear();
+    this.currentTurnToolExecutions = [];
     this.history.push({
       role: 'user',
       content: userInput,
@@ -1160,7 +1299,7 @@ export class AgentRunner {
     let styleRewriteCount = 0;
     let creationRefusalCount = 0;
     let creationNoToolCount = 0;
-    const initialWritePatchCount = this.countToolResults('write_patch');
+    const initialWritePatchCount = this.countSuccessfulToolExecutions('write_patch');
 
     for (let step = 1; step <= this.config.maxTurns; step += 1) {
       const rawResponse = await this.adapter.complete(this.buildMessages(), this.config);
@@ -1231,7 +1370,7 @@ export class AgentRunner {
 
         if (
           this.isSafeWorkspaceLocalCreationTask(userInput) &&
-          this.countToolResults('write_patch') === initialWritePatchCount &&
+          this.countSuccessfulToolExecutions('write_patch') === initialWritePatchCount &&
           this.looksLikeTaskCompletionClaim(envelope.message)
         ) {
           creationNoToolCount += 1;

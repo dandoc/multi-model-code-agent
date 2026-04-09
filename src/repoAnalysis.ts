@@ -167,6 +167,22 @@ function detectStack(topLevelFiles: string[], topLevelDirectories: string[]): st
   if (topLevelFiles.includes('pyproject.toml') || topLevelFiles.includes('requirements.txt')) {
     stack.push('Python project files detected');
   }
+  if (topLevelFiles.includes('Cargo.toml')) {
+    stack.push('Rust project via Cargo.toml');
+  }
+  if (
+    topLevelFiles.includes('pom.xml') ||
+    topLevelFiles.includes('build.gradle') ||
+    topLevelFiles.includes('build.gradle.kts')
+  ) {
+    stack.push('Java project files detected');
+  }
+  if (
+    topLevelFiles.some((file) => file.endsWith('.csproj') || file.endsWith('.sln')) ||
+    topLevelFiles.includes('Program.cs')
+  ) {
+    stack.push('.NET project files detected');
+  }
   if (topLevelDirectories.includes('docs/')) {
     stack.push('Documentation folder present');
   }
@@ -223,6 +239,31 @@ async function maybeAddSourceEquivalent(
       addCandidate(candidates, sourcePath, `${reason} (source equivalent)`, score + 5);
       return;
     }
+  }
+}
+
+async function maybeAddGoCmdCandidates(
+  rootDir: string,
+  candidates: Map<string, EntrypointCandidate>
+): Promise<void> {
+  const cmdDir = resolvePathInsideRoot(rootDir, 'cmd');
+  if (!existsSync(cmdDir)) {
+    return;
+  }
+
+  const entries = await readdir(cmdDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory() || shouldIgnoreDirectory(entry.name)) {
+      continue;
+    }
+
+    await maybeAddCandidate(
+      rootDir,
+      candidates,
+      path.posix.join('cmd', entry.name, 'main.go'),
+      `common Go command entrypoint under cmd/${entry.name}`,
+      107
+    );
   }
 }
 
@@ -296,6 +337,18 @@ export async function findEntrypointCandidates(
     ['src/index.tsx', 'common source entrypoint', 109],
     ['src/main.ts', 'common source entrypoint', 108],
     ['src/cli.ts', 'common CLI entrypoint', 108],
+    ['main.go', 'common Go root entrypoint', 110],
+    ['cmd/main.go', 'common Go command entrypoint', 108],
+    ['main.py', 'common Python root entrypoint', 106],
+    ['app.py', 'common Python app entrypoint', 105],
+    ['__main__.py', 'common Python module entrypoint', 105],
+    ['src/main.py', 'common Python source entrypoint', 104],
+    ['main.rs', 'common Rust root entrypoint', 106],
+    ['src/main.rs', 'common Rust source entrypoint', 107],
+    ['Program.cs', 'common .NET root entrypoint', 106],
+    ['src/Program.cs', 'common .NET source entrypoint', 105],
+    ['Main.java', 'common Java root entrypoint', 104],
+    ['src/main/java/Main.java', 'common Java source entrypoint', 105],
     ['index.ts', 'common root entrypoint', 100],
     ['main.ts', 'common root entrypoint', 99],
     ['cli.ts', 'common root CLI entrypoint', 99],
@@ -305,6 +358,8 @@ export async function findEntrypointCandidates(
   for (const [relativePath, reason, score] of commonPaths) {
     await maybeAddCandidate(rootDir, candidates, relativePath, reason, score);
   }
+
+  await maybeAddGoCmdCandidates(rootDir, candidates);
 
   return [...candidates.values()]
     .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path))

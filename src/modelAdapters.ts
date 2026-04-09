@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 
 import type { AgentConfig, ChatMessage, ModelAdapter } from './types.js';
 
@@ -63,6 +63,45 @@ function getCodexEnv(): NodeJS.ProcessEnv {
   delete env.OPENAI_ORG_ID;
   delete env.OPENAI_PROJECT;
   return env;
+}
+
+export async function terminateChildProcessTree(child: ChildProcess): Promise<void> {
+  const pid = child.pid;
+  if (!pid) {
+    try {
+      child.kill('SIGKILL');
+    } catch {}
+    return;
+  }
+
+  if (process.platform === 'win32') {
+    await new Promise<void>((resolve) => {
+      let finished = false;
+      const killer = spawn('taskkill', ['/T', '/F', '/PID', String(pid)], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+
+      const finish = (): void => {
+        if (finished) {
+          return;
+        }
+        finished = true;
+        try {
+          child.kill();
+        } catch {}
+        resolve();
+      };
+
+      killer.on('error', finish);
+      killer.on('close', finish);
+    });
+    return;
+  }
+
+  try {
+    child.kill('SIGKILL');
+  } catch {}
 }
 
 function renderCodexPrompt(messages: ChatMessage[]): string {
@@ -152,7 +191,7 @@ async function runCodexCommand(
         return;
       }
       settled = true;
-      child.kill();
+      void terminateChildProcessTree(child);
       reject(new Error('Codex CLI request timed out.'));
     }, timeoutMs);
 
