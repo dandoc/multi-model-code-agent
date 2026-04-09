@@ -641,3 +641,18 @@ Validation:
 - `npm run build`
 - `npm run smoke:sessions`
 - `npm run smoke:repl`
+
+### 2026-04-09 - Saved runtime profiles
+
+Summary:
+
+- added `/profiles save|load|delete` and `/profiles` so frequently used provider/model/workdir combinations can be reused quickly
+- profile loads reuse existing workdir validation and reset the conversation into a fresh session with the loaded runtime
+- profiles intentionally exclude API keys so secrets stay session-local
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:profiles`
+- `npm run smoke:repl`

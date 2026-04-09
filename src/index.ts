@@ -13,6 +13,7 @@ import {
 } from './config.js';
 import { loadDotEnv, updateDotEnv } from './env.js';
 import { createModelAdapter } from './modelAdapters.js';
+import { deleteProfile, loadProfile, renderProfileList, saveProfile } from './profileStore.js';
 import {
   isModelCompatible,
   providerBaseUrlEnvKey,
@@ -38,6 +39,7 @@ import {
 import {
   normalizeReplCommandAlias,
   parseHistoryRequest,
+  parseProfilesRequest,
   parseResumeRequest,
   parseSessionsRequest,
   shouldLogHistoryViewCommand,
@@ -99,13 +101,21 @@ function printReplHelp(): void {
       '                       Search saved sessions by title, model, provider, workdir, or reason',
       '  /sessions delete <session-id>',
       '                       Delete one saved session by full or unique-prefix id',
-      '  /sessions clear-idle [count]',
-      '                       Delete idle saved sessions, oldest first',
-      '  /sessions prune <keep-count>',
-      '                       Keep the latest saved sessions and delete older ones',
-      '  /session [count]      Alias for /sessions',
-      '  /title <text>         Set a custom title for the current session',
-      '  /tools                Show tool catalog',
+        '  /sessions clear-idle [count]',
+        '                       Delete idle saved sessions, oldest first',
+        '  /sessions prune <keep-count>',
+        '                       Keep the latest saved sessions and delete older ones',
+        '  /profiles            Show saved runtime profiles',
+        '  /profiles save <name>',
+        '                       Save the current provider/model/workdir/flags as a named profile',
+        '  /profiles load <name>',
+        '                       Restore a saved profile into the current runtime',
+        '  /profiles delete <name>',
+        '                       Delete one saved runtime profile',
+        '  /session [count]      Alias for /sessions',
+        '  /profile              Alias for /profiles',
+        '  /title <text>         Set a custom title for the current session',
+        '  /tools                Show tool catalog',
       '  /reset                Clear conversation history',
       '  /provider <name>      Switch provider (ollama, openai, codex) and save it to .env',
       '  /model <name>         Switch model and save it to .env',
@@ -659,6 +669,99 @@ async function main(): Promise<void> {
           })}`
         );
         continue;
+      }
+
+      if (entry === '/profiles' || entry.startsWith('/profiles ')) {
+        const request = parseProfilesRequest(entry);
+        if (request.kind === 'invalid') {
+          await logSessionEvent(() => sessionStore.logCommand(entry));
+          console.log(`\n${request.reason}`);
+          continue;
+        }
+
+        if (request.kind === 'list') {
+          await logSessionEvent(() => sessionStore.logCommand(entry));
+          try {
+            console.log(`\n${await renderProfileList(config)}`);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.log(`\n${message}`);
+          }
+          continue;
+        }
+
+        if (request.kind === 'save') {
+          await logSessionEvent(() => sessionStore.logCommand(entry));
+          try {
+            const profile = await saveProfile(request.name, config);
+            console.log(`\nSaved profile "${profile.name}".`);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.log(`\n${message}`);
+          }
+          continue;
+        }
+
+        if (request.kind === 'load') {
+          await logSessionEvent(() => sessionStore.logCommand(entry));
+          try {
+            const profile = await loadProfile(request.name);
+            if (!profile) {
+              console.log(`\nCould not find a saved profile named "${request.name}". Use /profiles to inspect saved names.`);
+              continue;
+            }
+
+            const nextWorkdir = resolveValidatedWorkdir(profile.workdir);
+            rebuildRuntime(
+              updateConfig(config, {
+                provider: profile.provider,
+                model: profile.model,
+                baseUrl: profile.baseUrl,
+                workdir: nextWorkdir,
+                autoApprove: profile.autoApprove,
+                maxTurns: profile.maxTurns,
+                temperature: profile.temperature,
+              }),
+              true
+            );
+            sessionStore = await createSessionStore(config, launchCwd, `profile load: ${profile.name}`);
+            await logSessionEvent(() => sessionStore.logConfig(`profile load: ${profile.name}`, config));
+            console.log(`\nLoaded profile "${profile.name}". Conversation reset.`);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.log(`\n${message}`);
+          }
+          continue;
+        }
+
+        if (request.kind === 'delete') {
+          await logSessionEvent(() => sessionStore.logCommand(entry));
+          try {
+            const profile = await loadProfile(request.name);
+            if (!profile) {
+              console.log(`\nCould not find a saved profile named "${request.name}".`);
+              continue;
+            }
+
+            const confirmed = await ui.confirm(
+              [
+                `Delete saved profile "${profile.name}"?`,
+                `provider=${profile.provider}, model=${profile.model || '(provider default)'}, workdir=${profile.workdir}`,
+              ].join('\n')
+            );
+            if (!confirmed) {
+              console.log('\nProfile delete cancelled.');
+              continue;
+            }
+
+            await deleteProfile(profile.name);
+            console.log(`\nDeleted profile "${profile.name}".`);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.log(`\n${message}`);
+          }
+          continue;
+        }
       }
 
       if (entry === '/tools') {

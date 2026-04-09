@@ -117,6 +117,27 @@ export type SessionsRequest =
       reason: string;
     };
 
+export type ProfilesRequest =
+  | {
+      kind: 'list';
+    }
+  | {
+      kind: 'save';
+      name: string;
+    }
+  | {
+      kind: 'load';
+      name: string;
+    }
+  | {
+      kind: 'delete';
+      name: string;
+    }
+  | {
+      kind: 'invalid';
+      reason: string;
+    };
+
 export function parseSessionsRequest(entry: string): SessionsRequest {
   const args = entry
     .slice('/sessions'.length)
@@ -307,6 +328,47 @@ export function parseSessionsRequest(entry: string): SessionsRequest {
   };
 }
 
+export function parseProfilesRequest(entry: string): ProfilesRequest {
+  const args = entry
+    .slice('/profiles'.length)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (args.length === 0) {
+    return { kind: 'list' };
+  }
+
+  const mode = args[0]?.toLowerCase();
+  const name = args.slice(1).join(' ').trim();
+
+  if (mode === 'save') {
+    if (!name) {
+      return { kind: 'invalid', reason: 'Use /profiles save <name>.' };
+    }
+    return { kind: 'save', name };
+  }
+
+  if (mode === 'load') {
+    if (!name) {
+      return { kind: 'invalid', reason: 'Use /profiles load <name>.' };
+    }
+    return { kind: 'load', name };
+  }
+
+  if (mode === 'delete' || mode === 'remove') {
+    if (!name) {
+      return { kind: 'invalid', reason: 'Use /profiles delete <name>.' };
+    }
+    return { kind: 'delete', name };
+  }
+
+  return {
+    kind: 'invalid',
+    reason: 'Use /profiles, /profiles save <name>, /profiles load <name>, or /profiles delete <name>.',
+  };
+}
+
 export function shouldLogSessionsViewCommand(request: SessionsRequest): boolean {
   return request.kind !== 'summary' || request.sessionRef !== 'current';
 }
@@ -318,6 +380,14 @@ export function normalizeReplCommandAlias(entry: string): string {
 
   if (entry.startsWith('/session ')) {
     return `/sessions ${entry.slice('/session '.length)}`;
+  }
+
+  if (entry === '/profile') {
+    return '/profiles';
+  }
+
+  if (entry.startsWith('/profile ')) {
+    return `/profiles ${entry.slice('/profile '.length)}`;
   }
 
   return entry;

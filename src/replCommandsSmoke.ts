@@ -1,6 +1,7 @@
 import {
   isWholeNumberText,
   normalizeReplCommandAlias,
+  parseProfilesRequest,
   parseHistoryRequest,
   parsePositiveCount,
   parseResumeRequest,
@@ -20,6 +21,11 @@ async function main(): Promise<void> {
   assert(
     normalizeReplCommandAlias('/session 5') === '/sessions 5',
     'Expected /session count alias to normalize.'
+  );
+  assert(normalizeReplCommandAlias('/profile') === '/profiles', 'Expected /profile alias to normalize.');
+  assert(
+    normalizeReplCommandAlias('/profile save local') === '/profiles save local',
+    'Expected /profile subcommand alias to normalize.'
   );
 
   assert(isWholeNumberText('10') === true, 'Expected plain digits to count as a whole number.');
@@ -202,6 +208,30 @@ async function main(): Promise<void> {
       resumeRuntimeById.applyRuntime === true,
     'Expected /resume runtime <session-id> to parse correctly.'
   );
+
+  const profilesDefault = parseProfilesRequest('/profiles');
+  assert(profilesDefault.kind === 'list', 'Expected bare /profiles to list saved profiles.');
+
+  const profilesSave = parseProfilesRequest('/profiles save local qwen');
+  assert(
+    profilesSave.kind === 'save' && profilesSave.name === 'local qwen',
+    'Expected /profiles save <name> to parse correctly.'
+  );
+
+  const profilesLoad = parseProfilesRequest('/profiles load remote codex');
+  assert(
+    profilesLoad.kind === 'load' && profilesLoad.name === 'remote codex',
+    'Expected /profiles load <name> to parse correctly.'
+  );
+
+  const profilesDelete = parseProfilesRequest('/profiles delete remote codex');
+  assert(
+    profilesDelete.kind === 'delete' && profilesDelete.name === 'remote codex',
+    'Expected /profiles delete <name> to parse correctly.'
+  );
+
+  const profilesInvalid = parseProfilesRequest('/profiles save');
+  assert(profilesInvalid.kind === 'invalid', 'Expected incomplete /profiles save to be rejected.');
 
   console.log('[repl-smoke] All REPL command parsing checks passed.');
 }

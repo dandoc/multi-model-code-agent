@@ -123,7 +123,12 @@ npm run dev
 - `/sessions delete <session-id>`
 - `/sessions clear-idle [count]`
 - `/sessions prune <keep-count>`
+- `/profiles`
+- `/profiles save <name>`
+- `/profiles load <name>`
+- `/profiles delete <name>`
 - `/session [count]`
+- `/profile`
 - `/title <text>`
 - `/tools`
 - `/reset`
@@ -193,6 +198,15 @@ Each REPL session now writes a small JSONL log so you can inspect recent activit
 - use `/status` to see the current runtime config together with the current saved session id, resume source, activity profile, and latest visible messages
 - corrupted or schema-invalid session logs are skipped during browsing with a visible warning
 - exact full session ids are resolved directly, even when they are older than the recent-session scan window
+
+## Saved profiles
+
+- use `/profiles save <name>` to store the current provider, model, base URL, workdir, and runtime flags as a reusable profile
+- use `/profiles` to list saved profiles and see which one matches the current runtime
+- use `/profiles load <name>` to restore a saved profile into the current runtime and reset the conversation
+- use `/profiles delete <name>` to remove a saved profile after confirmation
+- profiles do not store API keys; use `/api-key` separately if needed
+- `/profile` is a short alias for `/profiles`
 
 ## Good first prompts
 
