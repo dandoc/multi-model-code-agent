@@ -1,6 +1,8 @@
 import {
+  getHelpTopicForCommand,
   isWholeNumberText,
   normalizeReplCommandAlias,
+  parseHelpRequest,
   parseHistoryRequest,
   parseMaxTurnsRequest,
   parseModelsRequest,
@@ -10,6 +12,7 @@ import {
   parseResumeRequest,
   parseSessionsRequest,
   parseTemperatureRequest,
+  suggestClosestReplCommand,
   shouldLogHistoryViewCommand,
   shouldLogSessionsViewCommand,
 } from './replCommands.js';
@@ -30,6 +33,54 @@ async function main(): Promise<void> {
   assert(
     normalizeReplCommandAlias('/profile save local') === '/profiles save local',
     'Expected /profile subcommand alias to normalize.'
+  );
+  assert(normalizeReplCommandAlias('/?') === '/help', 'Expected /? to normalize to /help.');
+  assert(
+    normalizeReplCommandAlias('/? sessions') === '/help sessions',
+    'Expected topic help alias to normalize.'
+  );
+
+  const helpOverview = parseHelpRequest('/help');
+  assert(
+    helpOverview.kind === 'show' && helpOverview.topic === 'overview',
+    'Expected bare /help to show overview help.'
+  );
+
+  const helpSessions = parseHelpRequest('/help session');
+  assert(
+    helpSessions.kind === 'show' && helpSessions.topic === 'sessions',
+    'Expected /help session to normalize to the sessions topic.'
+  );
+
+  const helpModels = parseHelpRequest('/help models');
+  assert(
+    helpModels.kind === 'show' && helpModels.topic === 'models',
+    'Expected /help models to parse correctly.'
+  );
+
+  const helpInvalidTopic = parseHelpRequest('/help bananas');
+  assert(
+    helpInvalidTopic.kind === 'invalid',
+    'Expected unknown /help topics to be rejected.'
+  );
+
+  const helpTooManyArgs = parseHelpRequest('/help sessions extra');
+  assert(
+    helpTooManyArgs.kind === 'invalid',
+    'Expected malformed /help syntax to be rejected.'
+  );
+
+  assert(
+    suggestClosestReplCommand('/sesions') === '/sessions',
+    'Expected typo suggestions to find /sessions.'
+  );
+  assert(
+    suggestClosestReplCommand('/modle') === '/model',
+    'Expected typo suggestions to find /model.'
+  );
+  assert(
+    getHelpTopicForCommand('/models') === 'models',
+    'Expected command-to-help-topic mapping for /models.'
   );
 
   assert(isWholeNumberText('10') === true, 'Expected plain digits to count as a whole number.');

@@ -105,6 +105,8 @@ npm run dev
 ## REPL commands
 
 - `/help`
+- `/help runtime|sessions|profiles|models|safety`
+- `/?` and `/? <topic>` as a short alias for `/help`
 - `/config`
 - `/status`
 - `/history [count]`
@@ -150,6 +152,8 @@ npm run dev
 - `/request-timeout <seconds|default>`
 - `/approve on|off`
 - `/quit`
+
+If you mistype a slash command, the REPL now suggests the closest known command and a matching help topic when possible.
 
 ## Smoke test
 

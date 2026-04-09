@@ -181,6 +181,18 @@ export type ModelsRequest =
       reason: string;
     };
 
+export type HelpTopic = 'overview' | 'runtime' | 'sessions' | 'profiles' | 'models' | 'safety';
+
+export type HelpRequest =
+  | {
+      kind: 'show';
+      topic: HelpTopic;
+    }
+  | {
+      kind: 'invalid';
+      reason: string;
+    };
+
 export type RuntimeSettingRequest =
   | {
       kind: 'update';
@@ -191,6 +203,107 @@ export type RuntimeSettingRequest =
       kind: 'invalid';
       reason: string;
     };
+
+const HELP_TOPICS: readonly HelpTopic[] = [
+  'overview',
+  'runtime',
+  'sessions',
+  'profiles',
+  'models',
+  'safety',
+] as const;
+
+const COMMAND_HELP_TOPICS: Readonly<Record<string, HelpTopic>> = {
+  '/help': 'overview',
+  '/config': 'runtime',
+  '/status': 'runtime',
+  '/history': 'sessions',
+  '/resume': 'sessions',
+  '/sessions': 'sessions',
+  '/title': 'sessions',
+  '/profiles': 'profiles',
+  '/tools': 'safety',
+  '/reset': 'runtime',
+  '/provider': 'runtime',
+  '/model': 'runtime',
+  '/models': 'models',
+  '/base-url': 'runtime',
+  '/api-key': 'runtime',
+  '/workdir': 'runtime',
+  '/temperature': 'runtime',
+  '/max-turns': 'runtime',
+  '/request-timeout': 'runtime',
+  '/approve': 'safety',
+  '/quit': 'safety',
+};
+
+const KNOWN_ROOT_COMMANDS = Object.keys(COMMAND_HELP_TOPICS);
+
+function normalizeHelpTopic(value: string): HelpTopic | null {
+  const normalized = value.trim().toLowerCase();
+  switch (normalized) {
+    case '':
+    case 'overview':
+    case 'all':
+    case 'commands':
+      return 'overview';
+    case 'runtime':
+    case 'config':
+    case 'settings':
+      return 'runtime';
+    case 'session':
+    case 'sessions':
+    case 'history':
+    case 'resume':
+      return 'sessions';
+    case 'profile':
+    case 'profiles':
+      return 'profiles';
+    case 'model':
+    case 'models':
+    case 'provider':
+    case 'providers':
+      return 'models';
+    case 'safety':
+    case 'tool':
+    case 'tools':
+    case 'approval':
+    case 'shell':
+      return 'safety';
+    default:
+      return null;
+  }
+}
+
+function getRootCommand(entry: string): string {
+  return entry.trim().split(/\s+/, 1)[0]?.toLowerCase() ?? '';
+}
+
+function levenshteinDistance(a: string, b: string): number {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const matrix: number[][] = Array.from({ length: rows }, () => Array<number>(cols).fill(0));
+
+  for (let row = 0; row < rows; row += 1) {
+    matrix[row]![0] = row;
+  }
+  for (let col = 0; col < cols; col += 1) {
+    matrix[0]![col] = col;
+  }
+
+  for (let row = 1; row < rows; row += 1) {
+    for (let col = 1; col < cols; col += 1) {
+      const cost = a[row - 1] === b[col - 1] ? 0 : 1;
+      matrix[row]![col] = Math.min(
+        matrix[row - 1]![col]! + 1,
+        matrix[row]![col - 1]! + 1,
+        matrix[row - 1]![col - 1]! + cost
+      );
+    }
+  }
+
+  return matrix[rows - 1]![cols - 1]!;
+}
 
 export function parseSessionsRequest(entry: string): SessionsRequest {
   const args = entry
@@ -561,6 +674,14 @@ export function shouldLogSessionsViewCommand(request: SessionsRequest): boolean 
 }
 
 export function normalizeReplCommandAlias(entry: string): string {
+  if (entry === '/?') {
+    return '/help';
+  }
+
+  if (entry.startsWith('/? ')) {
+    return `/help ${entry.slice('/? '.length)}`;
+  }
+
   if (entry === '/session') {
     return '/sessions';
   }
@@ -578,6 +699,63 @@ export function normalizeReplCommandAlias(entry: string): string {
   }
 
   return entry;
+}
+
+export function parseHelpRequest(entry: string): HelpRequest {
+  const args = entry
+    .slice('/help'.length)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (args.length === 0) {
+    return { kind: 'show', topic: 'overview' };
+  }
+
+  if (args.length === 1) {
+    const topic = normalizeHelpTopic(args[0]!);
+    if (topic) {
+      return { kind: 'show', topic };
+    }
+
+    return {
+      kind: 'invalid',
+      reason: `Unknown help topic "${args[0]}". Use /help, /help runtime, /help sessions, /help profiles, /help models, or /help safety.`,
+    };
+  }
+
+  return {
+    kind: 'invalid',
+    reason: 'Use /help [runtime|sessions|profiles|models|safety].',
+  };
+}
+
+export function getHelpTopicForCommand(command: string): HelpTopic | null {
+  return COMMAND_HELP_TOPICS[command.toLowerCase()] ?? null;
+}
+
+export function suggestClosestReplCommand(entry: string): string | null {
+  const rootCommand = getRootCommand(entry);
+  if (!rootCommand.startsWith('/')) {
+    return null;
+  }
+
+  let bestCommand: string | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const candidate of KNOWN_ROOT_COMMANDS) {
+    const distance = levenshteinDistance(rootCommand, candidate);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestCommand = candidate;
+    }
+  }
+
+  if (!bestCommand) {
+    return null;
+  }
+
+  const threshold = rootCommand.length >= 10 ? 3 : 2;
+  return bestDistance <= threshold ? bestCommand : null;
 }
 
 export function parseTemperatureRequest(entry: string): RuntimeSettingRequest {

@@ -53,7 +53,9 @@ import {
   resolveSessionEntry,
 } from './sessionStore.js';
 import {
+  getHelpTopicForCommand,
   normalizeReplCommandAlias,
+  parseHelpRequest,
   parseHistoryRequest,
   parseMaxTurnsRequest,
   parseModelsRequest,
@@ -62,6 +64,7 @@ import {
   parseResumeRequest,
   parseSessionsRequest,
   parseTemperatureRequest,
+  suggestClosestReplCommand,
   shouldLogHistoryViewCommand,
   shouldLogSessionsViewCommand,
 } from './replCommands.js';
@@ -95,77 +98,130 @@ function printStartupHelp(): void {
   );
 }
 
-function printReplHelp(): void {
-  console.log(
-    [
+function printReplHelp(topic: 'overview' | 'runtime' | 'sessions' | 'profiles' | 'models' | 'safety' = 'overview'): void {
+  const sections: Record<typeof topic, string[]> = {
+    overview: [
       '',
-      'REPL commands:',
-      '  /help                 Show this help',
-      '  /config               Show current config',
-      '  /status               Show current runtime + saved-session status',
-      '  /history [count]      Show recent events from the current saved session',
-        '  /history latest [count] or /history <session-id> [count]',
-        '                       Show events from an earlier saved session',
-        '  /resume [count]       Resume the latest earlier session into the current conversation',
-        '  /resume latest [count] or /resume <session-id> [count]',
-        '                       Replace the current conversation with saved user/assistant messages',
-        '  /resume runtime latest [count] or /resume runtime <session-id> [count]',
-        '                       Also restore provider/model/workdir/flags from the saved session',
-        '  /sessions [count]     Show recent saved sessions',
-        '  /sessions summary <current|latest|session-id> [count]',
-        '                       Show a focused summary for one saved session',
+      'REPL help',
+      '  /help runtime      Runtime switching, config, and session tuning',
+      '  /help sessions     Session history, resume, titles, and cleanup',
+      '  /help profiles     Saved runtime profiles',
+      '  /help models       Model catalogs, doctor, and live smoke',
+      '  /help safety       Tools, approvals, reset, and exit',
+      '',
+      'Common commands:',
+      '  /config',
+      '  /status',
+      '  /sessions',
+      '  /profiles',
+      '  /models',
+      '  /tools',
+      '',
+      'Examples:',
+      '  /help sessions',
+      '  /resume latest',
+      '  /profiles diff my profile',
+      '  /models all doctor',
+      '',
+    ],
+    runtime: [
+      '',
+      'Help: runtime',
+      '  /config',
+      '  /status',
+      '  /provider <ollama|openai|codex>',
+      '  /model <name>',
+      '  /model default',
+      '  /base-url <url>',
+      '  /api-key <value>',
+      '  /workdir <path>',
+      '  /temperature <value|default>',
+      `  /max-turns <value|default>   (default=${DEFAULT_MAX_TURNS})`,
+      `  /request-timeout <seconds|default>   (${Math.round(DEFAULT_REQUEST_TIMEOUT_MS / 1000)}s default)`,
+      '',
+      'Examples:',
+      '  /provider codex',
+      '  /model qwen3-coder:30b',
+      '  /request-timeout 180',
+      '',
+    ],
+    sessions: [
+      '',
+      'Help: sessions',
+      '  /history [count]',
+      '  /history latest [count]',
+      '  /history <session-id> [count]',
+      '  /resume [count]',
+      '  /resume latest [count]',
+      '  /resume <session-id> [count]',
+      '  /resume runtime latest [count]',
+      '  /resume runtime <session-id> [count]',
+      '  /sessions [count]',
+      '  /sessions summary <current|latest|session-id> [count]',
       '  /sessions compare [count]',
-      '                       Compare recent non-idle sessions by activity profile and event counts',
       '  /sessions compare all [count]',
-      '                       Include idle sessions in the comparison view',
       '  /sessions search <query> [count]',
-      '                       Search saved sessions by title, model, provider, workdir, or reason',
       '  /sessions delete <session-id>',
-      '                       Delete one saved session by full or unique-prefix id',
-        '  /sessions clear-idle [count]',
-        '                       Delete idle saved sessions, oldest first',
-        '  /sessions prune <keep-count>',
-        '                       Keep the latest saved sessions and delete older ones',
-        '  /profiles            Show saved runtime profiles',
-        '  /profiles search <query>',
-        '                       Filter saved profiles by name, provider, model, base URL, or workdir',
-        '  /profiles diff <name>',
-        '                       Show what would change if you loaded one saved profile now',
-        '  /profiles save <name>',
-        '                       Save the current provider/model/workdir/flags as a named profile',
-        '  /profiles rename <old-name> --to <new-name>',
-        '                       Rename one saved runtime profile',
-        '  /profiles load <name>',
-        '                       Restore a saved profile into the current runtime',
-        '  /profiles delete <name>',
-        '                       Delete one saved runtime profile',
-        '  /session [count]      Alias for /sessions',
-        '  /profile              Alias for /profiles',
-        '  /title <text>         Set a custom title for the current session',
-        '  /tools                Show tool catalog',
-      '  /reset                Clear conversation history',
-      '  /provider <name>      Switch provider (ollama, openai, codex) and save it to .env',
-      '  /model <name>         Switch model and save it to .env',
-      '  /model default        Reset model to the provider default',
-      '  /models [scope]       Show models for current, all, or one provider',
-      '  /models [scope] search <query>',
-      '                       Filter available model names and show family hints',
-      '  /models [scope] doctor',
-      '                       Diagnose provider readiness and common failure causes',
-      '  /models [scope] smoke [quick|protocol|all]',
-      '                       Run live provider smoke checks for plain replies and/or structured JSON envelopes',
-      '  /base-url <url>       Switch base URL and save it to .env',
-      '  /api-key <value>      Set API key for this session',
-      '  /workdir <path>       Change workdir',
-      '  /temperature <value>  Set temperature for this session (0-1.5 or default)',
-      `  /max-turns <value>    Set max turns for this session (1-100 or default=${DEFAULT_MAX_TURNS})`,
-      '  /request-timeout <seconds>',
-      `                       Set request timeout for this session (${Math.round(DEFAULT_REQUEST_TIMEOUT_MS / 1000)}s default)`,
-      '  /approve on|off       Toggle auto approval',
-      '  /quit                 Exit',
+      '  /sessions clear-idle [count]',
+      '  /sessions prune <keep-count>',
+      '  /title <text>',
+      '  /session ...   alias for /sessions ...',
       '',
-    ].join('\n')
-  );
+      'Examples:',
+      '  /sessions compare',
+      '  /sessions summary latest 8',
+      '  /resume runtime latest',
+      '',
+    ],
+    profiles: [
+      '',
+      'Help: profiles',
+      '  /profiles',
+      '  /profiles search <query>',
+      '  /profiles diff <name>',
+      '  /profiles save <name>',
+      '  /profiles rename <old-name> --to <new-name>',
+      '  /profiles load <name>',
+      '  /profiles delete <name>',
+      '  /profile ...   alias for /profiles ...',
+      '',
+      'Examples:',
+      '  /profiles save local qwen',
+      '  /profiles diff remote codex',
+      '  /profiles load remote codex',
+      '',
+    ],
+    models: [
+      '',
+      'Help: models',
+      '  /models',
+      '  /models [current|all|provider] search <query>',
+      '  /models [current|all|provider] doctor',
+      '  /models [current|all|provider] smoke [quick|protocol|all]',
+      '',
+      'Examples:',
+      '  /models search qwen',
+      '  /models all doctor',
+      '  /models codex smoke protocol',
+      '',
+    ],
+    safety: [
+      '',
+      'Help: safety',
+      '  /tools',
+      '  /approve on|off',
+      '  /reset',
+      '  /quit',
+      '',
+      'Notes:',
+      '  - write_patch and run_shell require approval unless auto-approve is on',
+      '  - /reset clears conversation history only',
+      '  - /quit exits the REPL',
+      '',
+    ],
+  };
+
+  console.log(sections[topic].join('\n'));
 }
 
 function normalizeProvider(inputValue: string): ModelProvider | null {
@@ -397,9 +453,14 @@ async function main(): Promise<void> {
         break;
       }
 
-      if (entry === '/help') {
+      if (entry === '/help' || entry.startsWith('/help ')) {
         await logSessionEvent(() => sessionStore.logCommand(entry));
-        printReplHelp();
+        const request = parseHelpRequest(entry);
+        if (request.kind === 'invalid') {
+          console.log(`\n${request.reason}`);
+          continue;
+        }
+        printReplHelp(request.topic);
         continue;
       }
 
@@ -1211,7 +1272,16 @@ async function main(): Promise<void> {
 
       await logSessionEvent(() => sessionStore.logCommand(entry));
 
-      console.log('\nUnknown command. Type /help.');
+      const suggestion = suggestClosestReplCommand(entry);
+      const helpTopic = suggestion ? getHelpTopicForCommand(suggestion) : null;
+      if (suggestion) {
+        console.log(
+          `\nUnknown command. Did you mean ${suggestion}?${helpTopic ? ` Type /help ${helpTopic}.` : ' Type /help.'}`
+        );
+        continue;
+      }
+
+      console.log('\nUnknown command. Type /help, /help runtime, /help sessions, /help profiles, /help models, or /help safety.');
     }
   } finally {
     await logSessionEvent(() => sessionStore.logCommand('/quit'));

@@ -670,6 +670,7 @@ Summary:
 - added `npm run smoke:json-protocol` and folded it into the default smoke chain to lock in those response-normalization paths
 - the agent loop now retries once when a provider returns an empty or obviously placeholder-like final answer before falling back, with regression coverage for blank and `...`-style replies
 - the agent loop now also retries once when a reply looks like a broken `tool_call` / structured envelope, with regression coverage for both recovery and repeated-failure fallback
+- `/help` now supports focused topics (`runtime`, `sessions`, `profiles`, `models`, `safety`), `/?` aliases to `/help`, and unknown slash commands now suggest the closest valid command plus a relevant help topic
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:
