@@ -122,8 +122,17 @@ export type ProfilesRequest =
       kind: 'list';
     }
   | {
+      kind: 'search';
+      query: string;
+    }
+  | {
       kind: 'save';
       name: string;
+    }
+  | {
+      kind: 'rename';
+      from: string;
+      to: string;
     }
   | {
       kind: 'load';
@@ -340,6 +349,15 @@ export function parseProfilesRequest(entry: string): ProfilesRequest {
   }
 
   const mode = args[0]?.toLowerCase();
+  if (mode === 'search' || mode === 'find') {
+    const query = args.slice(1).join(' ').trim();
+    if (!query) {
+      return { kind: 'invalid', reason: 'Use /profiles search <query>.' };
+    }
+
+    return { kind: 'search', query };
+  }
+
   const name = args.slice(1).join(' ').trim();
 
   if (mode === 'save') {
@@ -347,6 +365,33 @@ export function parseProfilesRequest(entry: string): ProfilesRequest {
       return { kind: 'invalid', reason: 'Use /profiles save <name>.' };
     }
     return { kind: 'save', name };
+  }
+
+  if (mode === 'rename') {
+    const separatorIndex = args.findIndex((part, index) => index > 0 && part.toLowerCase() === '--to');
+    if (separatorIndex >= 0) {
+      const from = args.slice(1, separatorIndex).join(' ').trim();
+      const to = args.slice(separatorIndex + 1).join(' ').trim();
+      if (!from || !to) {
+        return { kind: 'invalid', reason: 'Use /profiles rename <old-name> --to <new-name>.' };
+      }
+
+      return {
+        kind: 'rename',
+        from,
+        to,
+      };
+    }
+
+    if (args.length !== 3) {
+      return { kind: 'invalid', reason: 'Use /profiles rename <old-name> --to <new-name>.' };
+    }
+
+    return {
+      kind: 'rename',
+      from: args[1]!,
+      to: args.slice(2).join(' ').trim(),
+    };
   }
 
   if (mode === 'load') {
@@ -365,7 +410,8 @@ export function parseProfilesRequest(entry: string): ProfilesRequest {
 
   return {
     kind: 'invalid',
-    reason: 'Use /profiles, /profiles save <name>, /profiles load <name>, or /profiles delete <name>.',
+    reason:
+      'Use /profiles, /profiles search <query>, /profiles save <name>, /profiles rename <old-name> --to <new-name>, /profiles load <name>, or /profiles delete <name>.',
   };
 }
 

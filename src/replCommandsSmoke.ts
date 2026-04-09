@@ -212,10 +212,24 @@ async function main(): Promise<void> {
   const profilesDefault = parseProfilesRequest('/profiles');
   assert(profilesDefault.kind === 'list', 'Expected bare /profiles to list saved profiles.');
 
+  const profilesSearch = parseProfilesRequest('/profiles search codex remote');
+  assert(
+    profilesSearch.kind === 'search' && profilesSearch.query === 'codex remote',
+    'Expected /profiles search <query> to parse correctly.'
+  );
+
   const profilesSave = parseProfilesRequest('/profiles save local qwen');
   assert(
     profilesSave.kind === 'save' && profilesSave.name === 'local qwen',
     'Expected /profiles save <name> to parse correctly.'
+  );
+
+  const profilesRename = parseProfilesRequest('/profiles rename local-qwen --to remote qwen');
+  assert(
+    profilesRename.kind === 'rename' &&
+      profilesRename.from === 'local-qwen' &&
+      profilesRename.to === 'remote qwen',
+    'Expected /profiles rename <old-name> <new-name> to parse correctly.'
   );
 
   const profilesLoad = parseProfilesRequest('/profiles load remote codex');
@@ -232,6 +246,20 @@ async function main(): Promise<void> {
 
   const profilesInvalid = parseProfilesRequest('/profiles save');
   assert(profilesInvalid.kind === 'invalid', 'Expected incomplete /profiles save to be rejected.');
+
+  const profilesRenameWithSpaces = parseProfilesRequest('/profiles rename remote codex --to remote gpt five');
+  assert(
+    profilesRenameWithSpaces.kind === 'rename' &&
+      profilesRenameWithSpaces.from === 'remote codex' &&
+      profilesRenameWithSpaces.to === 'remote gpt five',
+    'Expected /profiles rename <old-name> --to <new-name> to support spaces.'
+  );
+
+  const profilesRenameInvalid = parseProfilesRequest('/profiles rename local-qwen');
+  assert(
+    profilesRenameInvalid.kind === 'invalid',
+    'Expected incomplete /profiles rename to be rejected.'
+  );
 
   console.log('[repl-smoke] All REPL command parsing checks passed.');
 }

@@ -8,6 +8,7 @@ import {
   findMatchingProfiles,
   listProfiles,
   loadProfile,
+  renameProfile,
   renderMatchingProfilesLine,
   renderProfileList,
   saveProfile,
@@ -113,6 +114,56 @@ async function main(): Promise<void> {
     if (noMatchLine !== 'Matching profiles: (none)') {
       throw new Error(`Unexpected empty matching profile line: ${noMatchLine}`);
     }
+    const filteredProfiles = await renderProfileList(
+      {
+        provider: 'ollama',
+        model: 'qwen3-coder:30b',
+        baseUrl: 'http://127.0.0.1:11434',
+        workdir: workdirA,
+        autoApprove: false,
+        maxTurns: 8,
+        temperature: 0.2,
+      },
+      { query: 'codex' }
+    );
+    if (!filteredProfiles.includes('Saved profiles (1)') || !filteredProfiles.includes('match: name -> remote-codex')) {
+      throw new Error('Filtered profile list should include a match preview for codex.');
+    }
+    if (filteredProfiles.includes('local-qwen')) {
+      throw new Error('Filtered profile list should not include non-matching profiles.');
+    }
+    const noFilteredProfiles = await renderProfileList(
+      {
+        provider: 'ollama',
+        model: 'qwen3-coder:30b',
+        baseUrl: 'http://127.0.0.1:11434',
+        workdir: workdirA,
+        autoApprove: false,
+        maxTurns: 8,
+        temperature: 0.2,
+      },
+      { query: 'does-not-exist' }
+    );
+    if (
+      !noFilteredProfiles.includes('Saved profiles (0)') ||
+      !noFilteredProfiles.includes('Filter: does-not-exist') ||
+      !noFilteredProfiles.includes('No saved profiles matched that filter.')
+    ) {
+      throw new Error('Filtered empty profile list should explain that no profiles matched the filter.');
+    }
+
+    const renamed = await renameProfile('remote-codex', 'remote-codex-renamed');
+    if (!renamed || renamed.name !== 'remote-codex-renamed') {
+      throw new Error('Expected profile rename to return the renamed profile.');
+    }
+    const missingOld = await loadProfile('remote-codex');
+    if (missingOld) {
+      throw new Error('Old profile name should no longer resolve after rename.');
+    }
+    const renamedLoaded = await loadProfile('remote-codex-renamed');
+    if (!renamedLoaded || renamedLoaded.provider !== 'codex') {
+      throw new Error('Renamed profile could not be loaded back.');
+    }
 
     const previousUserProfile = process.env.USERPROFILE;
     delete process.env.MM_AGENT_HOME;
@@ -165,7 +216,7 @@ async function main(): Promise<void> {
       throw new Error('Profiles file is missing one of the concurrently saved profiles.');
     }
 
-    const deleted = await deleteProfile('remote-codex');
+    const deleted = await deleteProfile('remote-codex-renamed');
     if (!deleted) {
       throw new Error('Expected remote-codex profile to be deleted.');
     }

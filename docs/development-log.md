@@ -650,6 +650,7 @@ Summary:
 - profile storage now uses the same agent-home resolution as sessions and serializes read-modify-write updates with a lock + atomic rename
 - profile loads reuse existing workdir validation and reset the conversation into a fresh session with the loaded runtime
 - `/status` now shows which saved profiles match the current runtime
+- added `/profiles search <query>` and `/profiles rename <old-name> --to <new-name>` for easier profile management
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:

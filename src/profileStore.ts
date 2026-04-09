@@ -22,6 +22,10 @@ type StoredProfilesFile = {
   profiles: SavedProfile[];
 };
 
+type ProfileListRenderOptions = {
+  query?: string;
+};
+
 function getProfilesPath(): string {
   return path.join(getAgentHomeDir(), 'profiles.json');
 }
@@ -73,6 +77,43 @@ function matchesCurrentProfile(profile: SavedProfile, config: AgentConfig): bool
     profile.maxTurns === config.maxTurns &&
     profile.temperature === config.temperature
   );
+}
+
+function normalizeSearchQuery(query: string): string {
+  return query.trim().toLowerCase();
+}
+
+function matchesProfileSearch(profile: SavedProfile, query: string): boolean {
+  const normalized = normalizeSearchQuery(query);
+  if (!normalized) {
+    return true;
+  }
+
+  return [
+    profile.name,
+    profile.provider,
+    profile.model,
+    profile.baseUrl,
+    profile.workdir,
+  ].some((value) => value.toLowerCase().includes(normalized));
+}
+
+function findProfileSearchMatch(profile: SavedProfile, query: string): string | undefined {
+  const normalized = normalizeSearchQuery(query);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const candidates: Array<[label: string, value: string]> = [
+    ['name', profile.name],
+    ['provider', profile.provider],
+    ['model', profile.model || '(provider default)'],
+    ['base URL', profile.baseUrl],
+    ['workdir', profile.workdir],
+  ];
+
+  const found = candidates.find(([, value]) => value.toLowerCase().includes(normalized));
+  return found ? `match: ${found[0]} -> ${found[1]}` : undefined;
 }
 
 export async function findMatchingProfiles(config: AgentConfig): Promise<SavedProfile[]> {
@@ -208,6 +249,35 @@ export async function saveProfile(name: string, config: AgentConfig): Promise<Sa
   return nextProfile;
 }
 
+export async function renameProfile(fromName: string, toName: string): Promise<SavedProfile | null> {
+  const normalizedFrom = normalizeProfileName(fromName);
+  const normalizedTo = normalizeProfileName(toName);
+
+  return withProfilesLock(async () => {
+    const current = await loadProfilesFile();
+    const existing = current.profiles.find((profile) => profile.name === normalizedFrom);
+    if (!existing) {
+      return null;
+    }
+
+    if (normalizedFrom !== normalizedTo && current.profiles.some((profile) => profile.name === normalizedTo)) {
+      throw new Error(`A saved profile named "${normalizedTo}" already exists.`);
+    }
+
+    const renamed: SavedProfile = {
+      ...existing,
+      name: normalizedTo,
+      updatedAt: new Date().toISOString(),
+    };
+    const nextProfiles = current.profiles.filter(
+      (profile) => profile.name !== normalizedFrom && profile.name !== normalizedTo
+    );
+    nextProfiles.push(renamed);
+    await writeProfilesFile(nextProfiles);
+    return renamed;
+  });
+}
+
 export async function deleteProfile(name: string): Promise<boolean> {
   const normalizedName = normalizeProfileName(name);
   return withProfilesLock(async () => {
@@ -230,18 +300,37 @@ export async function deleteProfile(name: string): Promise<boolean> {
   });
 }
 
-export async function renderProfileList(currentConfig: AgentConfig): Promise<string> {
+export async function renderProfileList(
+  currentConfig: AgentConfig,
+  options: ProfileListRenderOptions = {}
+): Promise<string> {
   const profiles = await listProfiles();
+  const filtered = options.query ? profiles.filter((profile) => matchesProfileSearch(profile, options.query!)) : profiles;
   const profilesPath = getProfilesPath();
 
-  if (profiles.length === 0) {
-    return [`Saved profiles (0)`, `Path: ${profilesPath}`, 'No saved profiles yet. Use /profiles save <name>.'].join(
-      '\n'
-    );
+  if (filtered.length === 0) {
+    if (profiles.length === 0) {
+      return [
+        `Saved profiles (0)`,
+        `Path: ${profilesPath}`,
+        'No saved profiles yet. Use /profiles save <name>.',
+      ].join('\n');
+    }
+
+    return [
+      'Saved profiles (0)',
+      `Path: ${profilesPath}`,
+      `Filter: ${options.query}`,
+      'No saved profiles matched that filter.',
+    ].join('\n');
   }
 
-  const lines = [`Saved profiles (${profiles.length})`, `Path: ${profilesPath}`];
-  for (const profile of profiles) {
+  const lines = [`Saved profiles (${filtered.length})`, `Path: ${profilesPath}`];
+  if (options.query) {
+    lines.push(`Filter: ${options.query}`);
+  }
+
+  for (const profile of filtered) {
     const currentLabel = matchesCurrentProfile(profile, currentConfig) ? ' (current match)' : '';
     lines.push(`- name: ${profile.name}${currentLabel}`);
     lines.push(`  updated: ${formatTimestamp(profile.updatedAt)}`);
@@ -251,6 +340,10 @@ export async function renderProfileList(currentConfig: AgentConfig): Promise<str
     lines.push(
       `  flags: autoApprove=${profile.autoApprove}, maxTurns=${profile.maxTurns}, temperature=${profile.temperature}`
     );
+    const matchLine = options.query ? findProfileSearchMatch(profile, options.query) : undefined;
+    if (matchLine) {
+      lines.push(`  ${matchLine}`);
+    }
     lines.push('');
   }
 

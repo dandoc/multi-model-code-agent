@@ -16,6 +16,7 @@ import { createModelAdapter } from './modelAdapters.js';
 import {
   deleteProfile,
   loadProfile,
+  renameProfile,
   renderMatchingProfilesLine,
   renderProfileList,
   saveProfile,
@@ -112,8 +113,12 @@ function printReplHelp(): void {
         '  /sessions prune <keep-count>',
         '                       Keep the latest saved sessions and delete older ones',
         '  /profiles            Show saved runtime profiles',
+        '  /profiles search <query>',
+        '                       Filter saved profiles by name, provider, model, base URL, or workdir',
         '  /profiles save <name>',
         '                       Save the current provider/model/workdir/flags as a named profile',
+        '  /profiles rename <old-name> --to <new-name>',
+        '                       Rename one saved runtime profile',
         '  /profiles load <name>',
         '                       Restore a saved profile into the current runtime',
         '  /profiles delete <name>',
@@ -700,11 +705,39 @@ async function main(): Promise<void> {
           continue;
         }
 
+        if (request.kind === 'search') {
+          await logSessionEvent(() => sessionStore.logCommand(entry));
+          try {
+            console.log(`\n${await renderProfileList(config, { query: request.query })}`);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.log(`\n${message}`);
+          }
+          continue;
+        }
+
         if (request.kind === 'save') {
           await logSessionEvent(() => sessionStore.logCommand(entry));
           try {
             const profile = await saveProfile(request.name, config);
             console.log(`\nSaved profile "${profile.name}".`);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.log(`\n${message}`);
+          }
+          continue;
+        }
+
+        if (request.kind === 'rename') {
+          await logSessionEvent(() => sessionStore.logCommand(entry));
+          try {
+            const renamed = await renameProfile(request.from, request.to);
+            if (!renamed) {
+              console.log(`\nCould not find a saved profile named "${request.from}". Use /profiles to inspect saved names.`);
+              continue;
+            }
+
+            console.log(`\nRenamed profile to "${renamed.name}".`);
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             console.log(`\n${message}`);
