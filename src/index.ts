@@ -18,6 +18,7 @@ import {
   loadProfile,
   renameProfile,
   renderProfileDiff,
+  renderProfileLoadPreview,
   renderMatchingProfilesLine,
   renderProfileList,
   saveProfile,
@@ -775,6 +776,11 @@ async function main(): Promise<void> {
             }
 
             const nextWorkdir = resolveValidatedWorkdir(profile.workdir);
+            const confirmed = await ui.confirm(renderProfileLoadPreview(config, profile));
+            if (!confirmed) {
+              console.log('\nProfile load cancelled.');
+              continue;
+            }
             rebuildRuntime(
               updateConfig(config, {
                 provider: profile.provider,

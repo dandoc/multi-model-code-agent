@@ -209,7 +209,7 @@ Each REPL session now writes a small JSONL log so you can inspect recent activit
 - use `/profiles search <query>` to filter saved profiles by name, provider, model, base URL, or workdir
 - use `/profiles diff <name>` to see what would change before loading a saved profile
 - use `/profiles rename <old-name> --to <new-name>` to rename a saved profile without recreating it
-- use `/profiles load <name>` to restore a saved profile into the current runtime and reset the conversation
+- use `/profiles load <name>` to preview the changes, confirm them, and then restore a saved profile into the current runtime
 - use `/profiles delete <name>` to remove a saved profile after confirmation
 - `/status` now also shows which saved profiles match the current runtime exactly
 - profiles do not store API keys; use `/api-key` separately if needed

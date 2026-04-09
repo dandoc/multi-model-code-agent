@@ -350,6 +350,28 @@ export function renderProfileDiff(currentConfig: AgentConfig, profile: SavedProf
   return lines.join('\n');
 }
 
+export function renderProfileLoadPreview(currentConfig: AgentConfig, profile: SavedProfile): string {
+  const diffFields = collectProfileDiff(currentConfig, profile);
+  const lines = [
+    `Load profile: ${profile.name}`,
+    `Updated: ${formatTimestamp(profile.updatedAt)}`,
+    `Current runtime: provider=${currentConfig.provider}, model=${currentConfig.model}, workdir=${currentConfig.workdir}`,
+    `Saved profile: provider=${profile.provider}, model=${profile.model}, workdir=${profile.workdir}`,
+  ];
+
+  if (diffFields.length === 0) {
+    lines.push('This profile already matches the current runtime.');
+  } else {
+    lines.push(`Changed fields (${diffFields.length}):`);
+    for (const field of diffFields) {
+      lines.push(`- ${field.label}: ${field.current} -> ${field.saved}`);
+    }
+  }
+
+  lines.push('Loading a profile resets the current conversation.');
+  return lines.join('\n');
+}
+
 export async function deleteProfile(name: string): Promise<boolean> {
   const normalizedName = normalizeProfileName(name);
   return withProfilesLock(async () => {

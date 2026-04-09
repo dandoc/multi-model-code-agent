@@ -10,6 +10,7 @@ import {
   loadProfile,
   renameProfile,
   renderProfileDiff,
+  renderProfileLoadPreview,
   renderMatchingProfilesLine,
   renderProfileList,
   saveProfile,
@@ -118,6 +119,25 @@ async function main(): Promise<void> {
     if (!diffSame.includes('No changes. This profile already matches the current runtime exactly.')) {
       throw new Error('Profile diff should explain when the saved profile already matches the current runtime.');
     }
+    const loadPreviewSame = renderProfileLoadPreview(
+      {
+        provider: 'ollama',
+        model: 'qwen3-coder:30b',
+        baseUrl: 'http://127.0.0.1:11434',
+        workdir: workdirA,
+        autoApprove: false,
+        maxTurns: 8,
+        temperature: 0.2,
+      },
+      saved
+    );
+    if (
+      !loadPreviewSame.includes('Load profile: local-qwen') ||
+      !loadPreviewSame.includes('This profile already matches the current runtime.') ||
+      !loadPreviewSame.includes('Loading a profile resets the current conversation.')
+    ) {
+      throw new Error('Profile load preview should explain the no-op case and conversation reset.');
+    }
     const diffChanged = renderProfileDiff(
       {
         provider: 'codex',
@@ -137,6 +157,25 @@ async function main(): Promise<void> {
       !diffChanged.includes(`- autoApprove: true -> false`)
     ) {
       throw new Error('Profile diff should list changed runtime fields.');
+    }
+    const loadPreviewChanged = renderProfileLoadPreview(
+      {
+        provider: 'codex',
+        model: 'gpt-5.4',
+        baseUrl: 'http://127.0.0.1:11434',
+        workdir: workdirB,
+        autoApprove: true,
+        maxTurns: 42,
+        temperature: 0.7,
+      },
+      saved
+    );
+    if (
+      !loadPreviewChanged.includes('Changed fields (6):') ||
+      !loadPreviewChanged.includes(`- provider: codex -> ollama`) ||
+      !loadPreviewChanged.includes('Loading a profile resets the current conversation.')
+    ) {
+      throw new Error('Profile load preview should list changed fields before confirmation.');
     }
     const noMatchLine = await renderMatchingProfilesLine({
       provider: 'ollama',
