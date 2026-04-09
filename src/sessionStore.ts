@@ -569,6 +569,7 @@ function findSessionSearchMatch(entry: SessionListEntry, query: string): Session
   }
 
   const candidates: Array<{ label: string; value?: string }> = [
+    { label: 'session id', value: entry.sessionId },
     { label: 'title', value: entry.title },
     { label: 'first request', value: entry.firstRequest },
     { label: 'last user', value: entry.lastUserMessage },

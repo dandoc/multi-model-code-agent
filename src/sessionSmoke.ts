@@ -294,6 +294,35 @@ async function main(): Promise<void> {
       throw new Error('Assistant-content filtered session list should not include unrelated sessions.');
     }
 
+    const sessionIdFilteredSessionList = await renderSessionList(10, {
+      currentSessionId: store.sessionId,
+      query: store.sessionId,
+    });
+    assertIncludesAll(
+      sessionIdFilteredSessionList,
+      [
+        'Saved sessions (1)',
+        `Filter: ${store.sessionId}`,
+        `- id: ${store.sessionId} (current)`,
+        `  match: session id -> ${store.sessionId}`,
+      ],
+      'session-id filtered session list'
+    );
+
+    const sessionIdPrefixFilteredSessionList = await renderSessionList(10, {
+      currentSessionId: store.sessionId,
+      query: store.sessionId.slice(0, 10),
+    });
+    assertIncludesAll(
+      sessionIdPrefixFilteredSessionList,
+      [
+        `Filter: ${store.sessionId.slice(0, 10)}`,
+        `- id: ${store.sessionId} (current)`,
+        `  match: session id -> ${store.sessionId}`,
+      ],
+      'session-id prefix filtered session list'
+    );
+
     const comparison = await renderSessionComparison(5, store.sessionId);
     assertIncludesAll(
       comparison,
