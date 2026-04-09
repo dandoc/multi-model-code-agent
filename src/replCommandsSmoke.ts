@@ -133,6 +133,12 @@ async function main(): Promise<void> {
     'Expected /sessions clear-idle <count> to parse correctly.'
   );
 
+  const sessionsClearIdleZero = parseSessionsRequest('/sessions clear-idle 0');
+  assert(
+    sessionsClearIdleZero.kind === 'invalid',
+    'Expected /sessions clear-idle 0 to be rejected.'
+  );
+
   const sessionsPrune = parseSessionsRequest('/sessions prune 25');
   assert(
     sessionsPrune.kind === 'prune' && sessionsPrune.keepCount === 25,

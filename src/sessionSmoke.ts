@@ -541,7 +541,7 @@ async function main(): Promise<void> {
     process.env.MM_AGENT_HOME = bulkRoot;
     await mkdir(bulkSessionsDir, { recursive: true });
 
-    for (let index = 0; index < 205; index += 1) {
+    for (let index = 0; index < 505; index += 1) {
       const sessionId = `2026-01-01T00-00-00-000Z-bulk-${String(index).padStart(6, '0')}`;
       await writeSessionFixture(
         bulkSessionsDir,
@@ -563,6 +563,13 @@ async function main(): Promise<void> {
       [`Session ${oldestSessionId}`, `Workdir: ${path.join(bulkRoot, 'workspace-0')}`],
       'oldest session history'
     );
+
+    const pruneLargePlan = await planSessionPrune(10);
+    if (pruneLargePlan.entries.length !== 495) {
+      throw new Error(
+        `Expected prune plan to delete 495 sessions out of 505 when keeping 10, got ${pruneLargePlan.entries.length}.`
+      );
+    }
 
     process.env.MM_AGENT_HOME = tempRoot;
 

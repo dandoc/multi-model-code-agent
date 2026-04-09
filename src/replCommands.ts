@@ -249,9 +249,16 @@ export function parseSessionsRequest(entry: string): SessionsRequest {
     }
 
     if (args.length === 2 && isWholeNumberText(args[1])) {
+      if (Number.parseInt(args[1], 10) <= 0) {
+        return {
+          kind: 'invalid',
+          reason: 'Use /sessions clear-idle [count] with a positive count.',
+        };
+      }
+
       return {
         kind: 'clear-idle',
-        count: parsePositiveCount(args[1], 0, 200),
+        count: parsePositiveCount(args[1], 1, 200),
       };
     }
 

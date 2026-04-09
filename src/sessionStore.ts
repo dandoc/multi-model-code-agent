@@ -721,7 +721,7 @@ export async function planIdleSessionCleanup(
   currentSessionId?: string,
   count?: number
 ): Promise<SessionCleanupPlan> {
-  const scan = await scanRecentSessions(500);
+  const scan = await scanRecentSessions();
   const idleEntries: SessionListEntry[] = [];
 
   for (const entry of scan.entries) {
@@ -749,7 +749,7 @@ export async function planSessionPrune(
   keepCount: number,
   currentSessionId?: string
 ): Promise<SessionCleanupPlan> {
-  const scan = await scanRecentSessions(500);
+  const scan = await scanRecentSessions();
   const keep = new Set<string>();
 
   for (const entry of scan.entries.slice(0, Math.max(1, keepCount))) {
