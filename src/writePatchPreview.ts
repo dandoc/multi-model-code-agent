@@ -510,8 +510,22 @@ export function renderWritePatchPreview(
   mode: 'approval' | 'result'
 ): string {
   if (preview.operation === 'batch') {
+    if (mode === 'approval') {
+      return [
+        'mode: batch',
+        `edits: ${preview.editCount} across ${preview.fileCount} file${preview.fileCount === 1 ? '' : 's'}`,
+        `rollback on failure: ${preview.rollbackOnFailure}`,
+        `changed files: ${preview.changedPaths.map((item) => displayPath(item)).join(', ')}`,
+        ...preview.previews.flatMap((item, index) => [
+          '',
+          `edit ${index + 1}:`,
+          indentBlock(renderWritePatchPreview(item, mode)),
+        ]),
+      ].join('\n');
+    }
+
     return [
-      `${mode === 'approval' ? 'Approve batch write_patch' : 'Applied batch write_patch'}: ${preview.editCount} edit${preview.editCount === 1 ? '' : 's'} across ${preview.fileCount} file${preview.fileCount === 1 ? '' : 's'}.`,
+      `Applied batch write_patch: ${preview.editCount} edit${preview.editCount === 1 ? '' : 's'} across ${preview.fileCount} file${preview.fileCount === 1 ? '' : 's'}.`,
       `Rollback on failure: ${preview.rollbackOnFailure}`,
       `Changed files: ${preview.changedPaths.map((item) => displayPath(item)).join(', ')}`,
       ...preview.previews.flatMap((item, index) => [
@@ -523,8 +537,18 @@ export function renderWritePatchPreview(
   }
 
   if (preview.operation === 'create') {
+    if (mode === 'approval') {
+      return [
+        `create: ${displayPath(preview.path)}`,
+        `overwrite: ${preview.overwrite}`,
+        `content lines: ${preview.lineCount}`,
+        `content chars: ${preview.charCount}`,
+        renderLiteralBlock('diff preview:', preview.diffPreview),
+      ].join('\n');
+    }
+
     return [
-      `${mode === 'approval' ? 'Approve create' : 'Created'}: ${displayPath(preview.path)}`,
+      `Created: ${displayPath(preview.path)}`,
       `Overwrite: ${preview.overwrite}`,
       `Content lines: ${preview.lineCount}`,
       `Content chars: ${preview.charCount}`,
@@ -532,8 +556,21 @@ export function renderWritePatchPreview(
     ].join('\n');
   }
 
+  if (mode === 'approval') {
+    return [
+      `replace: ${displayPath(preview.path)}`,
+      `matches: ${preview.matches}`,
+      `replace all: ${preview.replaceAll}`,
+      `first match line: ${preview.firstMatchLine ?? 'not found'}`,
+      preview.previewNote ? `preview note: ${preview.previewNote}` : '',
+      renderLiteralBlock('diff preview:', preview.diffPreview),
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
   return [
-    `${mode === 'approval' ? 'Approve replace' : 'Updated'}: ${displayPath(preview.path)}`,
+    `Updated: ${displayPath(preview.path)}`,
     `Matches: ${preview.matches}`,
     `Replace all: ${preview.replaceAll}`,
     `First match line: ${preview.firstMatchLine ?? 'not found'}`,

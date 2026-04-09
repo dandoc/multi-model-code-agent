@@ -451,10 +451,14 @@ export class AgentRunner {
     if (tool.name === 'write_patch') {
       try {
         const preview = await previewWritePatch(this.config.workdir, args);
-        return [renderWritePatchPreview(preview, 'approval'), '', 'Approve this edit?'].join('\n');
+        return [
+          'write_patch approval',
+          `cwd: ${this.config.workdir}`,
+          renderWritePatchPreview(preview, 'approval'),
+        ].join('\n');
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return [`Approve write_patch?`, `Preview unavailable: ${message}`].join('\n');
+        return ['write_patch approval', `cwd: ${this.config.workdir}`, `Preview unavailable: ${message}`].join('\n');
       }
     }
 
@@ -464,10 +468,11 @@ export class AgentRunner {
       const shell =
         typeof args.shell === 'string' && args.shell.trim().length > 0 ? args.shell.trim() : 'default';
       return [
-        `Approve shell command in ${this.config.workdir}?`,
-        `Shell: ${shell}`,
-        `Timeout: ${timeoutMs}ms`,
-        'Command:',
+        'run_shell approval',
+        `cwd: ${this.config.workdir}`,
+        `shell: ${shell}`,
+        `timeout: ${timeoutMs}ms`,
+        'command:',
         command,
       ].join('\n');
     }
@@ -481,26 +486,27 @@ export class AgentRunner {
         ? args.extensions.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
         : [];
       const lines = [
-        `Approve run_files in ${this.config.workdir}?`,
-        `Timeout per file: ${timeoutMs}ms`,
+        'run_files approval',
+        `cwd: ${this.config.workdir}`,
+        `timeout per file: ${timeoutMs}ms`,
       ];
 
       if (paths.length > 0) {
-        lines.push(`Paths: ${paths.join(', ')}`);
+        lines.push(`paths: ${paths.join(', ')}`);
       } else {
         const directory =
           typeof args.directory === 'string' && args.directory.trim().length > 0
             ? args.directory.trim()
             : '.';
-        lines.push(`Directory: ${directory}`);
+        lines.push(`directory: ${directory}`);
         if (typeof args.nameContains === 'string' && args.nameContains.trim().length > 0) {
-          lines.push(`Name contains: ${args.nameContains.trim()}`);
+          lines.push(`name contains: ${args.nameContains.trim()}`);
         }
         if (extensions.length > 0) {
-          lines.push(`Extensions: ${extensions.join(', ')}`);
+          lines.push(`extensions: ${extensions.join(', ')}`);
         }
         lines.push(
-          `Recursive: ${typeof args.recursive === 'boolean' ? String(args.recursive) : 'true'}`
+          `recursive: ${typeof args.recursive === 'boolean' ? String(args.recursive) : 'true'}`
         );
       }
 
