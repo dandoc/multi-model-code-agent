@@ -48,6 +48,7 @@ import {
 import {
   normalizeReplCommandAlias,
   parseHistoryRequest,
+  parseModelsRequest,
   parseProfilesRequest,
   parseResumeRequest,
   parseSessionsRequest,
@@ -136,6 +137,8 @@ function printReplHelp(): void {
       '  /model <name>         Switch model and save it to .env',
       '  /model default        Reset model to the provider default',
       '  /models [scope]       Show models for current, all, or one provider',
+      '  /models [scope] search <query>',
+      '                       Filter available model names and show family hints',
       '  /base-url <url>       Switch base URL and save it to .env',
       '  /api-key <value>      Set API key for this session',
       '  /workdir <path>       Change workdir',
@@ -933,20 +936,13 @@ async function main(): Promise<void> {
 
       if (entry.startsWith('/models')) {
         await logSessionEvent(() => sessionStore.logCommand(entry));
-        const requestedScope = entry.slice('/models'.length).trim().toLowerCase();
-        const scope =
-          !requestedScope || requestedScope === 'current'
-            ? 'current'
-            : requestedScope === 'all'
-              ? 'all'
-              : normalizeProvider(requestedScope);
-
-        if (!scope) {
-          console.log('\nUse /models, /models all, or /models <ollama|openai|codex>.');
+        const request = parseModelsRequest(entry);
+        if (request.kind === 'invalid') {
+          console.log(`\n${request.reason}`);
           continue;
         }
 
-        console.log(`\n${await renderModelCatalogs(config, scope)}`);
+        console.log(`\n${await renderModelCatalogs(config, request.scope, { query: request.query })}`);
         continue;
       }
 

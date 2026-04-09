@@ -13,6 +13,10 @@ type ProviderModelCatalog = {
   notes: string[];
 };
 
+type RenderCatalogOptions = {
+  query?: string;
+};
+
 function getOllamaCommand(): string {
   return process.platform === 'win32' ? 'ollama.exe' : 'ollama';
 }
@@ -110,6 +114,56 @@ export function resolveStoredModelForProvider(
 
 function currentModelLabel(model: string): string {
   return model.trim() || '(provider default)';
+}
+
+function normalizeModelSearchQuery(query: string): string {
+  return query.trim().toLowerCase();
+}
+
+function matchesModelQuery(model: string, query: string): boolean {
+  const normalized = normalizeModelSearchQuery(query);
+  if (!normalized) {
+    return true;
+  }
+
+  return model.toLowerCase().includes(normalized);
+}
+
+export function describeModelFamily(provider: ModelProvider, model: string): string[] {
+  const normalized = model.trim().toLowerCase();
+  if (!normalized || normalized === '(provider default)') {
+    return [];
+  }
+
+  if (normalized.includes('qwen3-coder')) {
+    return ['Qwen3 Coder family: deeper local reasoning, usually slower than smaller Qwen coder variants.'];
+  }
+
+  if (normalized.includes('qwen2.5-coder')) {
+    return ['Qwen2.5 Coder family: balanced local coding default and a solid fast baseline.'];
+  }
+
+  if (normalized.includes('gemma')) {
+    return ['Gemma family: lighter local option; re-check grounding on larger repo analysis tasks.'];
+  }
+
+  if (normalized.includes('gpt-5.4')) {
+    return ['GPT-5.4: strongest remote reasoning/coding option in this toolchain.'];
+  }
+
+  if (normalized.includes('gpt-5.3-codex')) {
+    return ['GPT-5.3 Codex: faster Codex-oriented option when GPT-5.4 feels heavy.'];
+  }
+
+  if (provider === 'codex' || normalized.includes('codex')) {
+    return ['Codex family: remote agentic coding path through the local codex CLI login.'];
+  }
+
+  if (normalized.includes('llama')) {
+    return ['Llama family: general local option; coding quality depends heavily on the checkpoint.'];
+  }
+
+  return [];
 }
 
 async function listOllamaModels(): Promise<{ models: string[]; notes: string[] }> {
@@ -243,19 +297,35 @@ async function buildCatalog(config: AgentConfig, provider: ModelProvider): Promi
   return { provider, currentModel, defaultModel, models, notes };
 }
 
-function renderCatalog(catalog: ProviderModelCatalog): string {
+function renderCatalog(catalog: ProviderModelCatalog, options: RenderCatalogOptions = {}): string {
+  const filteredModels = options.query
+    ? catalog.models.filter((model) => matchesModelQuery(model, options.query!))
+    : catalog.models;
   const lines = [
     `provider     ${catalog.provider}`,
     `current      ${currentModelLabel(catalog.currentModel)}`,
     `default      ${currentModelLabel(catalog.defaultModel)}`,
+    ...(options.query ? [`filter       ${options.query}`] : []),
     'available',
   ];
 
-  if (catalog.models.length === 0) {
-    lines.push('- (no live list available)');
+  if (filteredModels.length === 0) {
+    lines.push(options.query ? '- (no models matched this filter)' : '- (no live list available)');
   } else {
-    for (const model of catalog.models) {
+    for (const model of filteredModels) {
       lines.push(`- ${model}`);
+    }
+  }
+
+  const insightSeed = options.query
+    ? filteredModels
+    : [catalog.currentModel.trim()].filter(Boolean);
+  const insights = [...new Set(insightSeed.flatMap((model) => describeModelFamily(catalog.provider, model)))];
+
+  if (insights.length > 0) {
+    lines.push(options.query ? 'match hints' : 'current hint');
+    for (const insight of insights) {
+      lines.push(`- ${insight}`);
     }
   }
 
@@ -271,10 +341,11 @@ function renderCatalog(catalog: ProviderModelCatalog): string {
 
 export async function renderModelCatalogs(
   config: AgentConfig,
-  scope: 'current' | 'all' | ModelProvider
+  scope: 'current' | 'all' | ModelProvider,
+  options: RenderCatalogOptions = {}
 ): Promise<string> {
   const providers: ModelProvider[] =
     scope === 'all' ? ['ollama', 'openai', 'codex'] : [scope === 'current' ? config.provider : scope];
   const catalogs = await Promise.all(providers.map((provider) => buildCatalog(config, provider)));
-  return catalogs.map(renderCatalog).join('\n\n');
+  return catalogs.map((catalog) => renderCatalog(catalog, options)).join('\n\n');
 }

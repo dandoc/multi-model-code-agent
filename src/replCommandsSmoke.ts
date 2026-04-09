@@ -1,5 +1,6 @@
 import {
   isWholeNumberText,
+  parseModelsRequest,
   normalizeReplCommandAlias,
   parseProfilesRequest,
   parseHistoryRequest,
@@ -271,6 +272,34 @@ async function main(): Promise<void> {
   assert(
     profilesRenameInvalid.kind === 'invalid',
     'Expected incomplete /profiles rename to be rejected.'
+  );
+
+  const modelsDefault = parseModelsRequest('/models');
+  assert(
+    modelsDefault.kind === 'show' && modelsDefault.scope === 'current' && !modelsDefault.query,
+    'Expected bare /models to target the current provider.'
+  );
+
+  const modelsAllSearch = parseModelsRequest('/models all search qwen');
+  assert(
+    modelsAllSearch.kind === 'show' &&
+      modelsAllSearch.scope === 'all' &&
+      modelsAllSearch.query === 'qwen',
+    'Expected /models all search <query> to parse correctly.'
+  );
+
+  const modelsProviderSearch = parseModelsRequest('/models codex search gpt-5');
+  assert(
+    modelsProviderSearch.kind === 'show' &&
+      modelsProviderSearch.scope === 'codex' &&
+      modelsProviderSearch.query === 'gpt-5',
+    'Expected /models <provider> search <query> to parse correctly.'
+  );
+
+  const modelsInvalid = parseModelsRequest('/models current search');
+  assert(
+    modelsInvalid.kind === 'invalid',
+    'Expected incomplete /models ... search to be rejected.'
   );
 
   console.log('[repl-smoke] All REPL command parsing checks passed.');

@@ -1,0 +1,66 @@
+import { describeModelFamily, renderModelCatalogs } from './providerModels.js';
+
+import type { AgentConfig } from './types.js';
+
+function assert(condition: unknown, message: string): void {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+async function main(): Promise<void> {
+  const config: AgentConfig = {
+    provider: 'ollama',
+    model: 'qwen3-coder:30b',
+    baseUrl: 'http://127.0.0.1:11434',
+    workdir: process.cwd(),
+    autoApprove: false,
+    maxTurns: 8,
+    temperature: 0.2,
+  };
+
+  const qwenHints = describeModelFamily('ollama', 'qwen2.5-coder:7b');
+  assert(
+    qwenHints.some((hint) => hint.includes('balanced local coding default')),
+    'Expected Qwen2.5 family hints to mention the balanced local coding baseline.'
+  );
+
+  const codexHints = describeModelFamily('codex', 'gpt-5.3-codex');
+  assert(
+    codexHints.some((hint) => hint.includes('faster Codex-oriented option')),
+    'Expected GPT-5.3 Codex family hints to mention the faster Codex-oriented option.'
+  );
+
+  const filteredCurrent = await renderModelCatalogs(config, 'current', { query: 'qwen' });
+  assert(
+    filteredCurrent.includes('filter       qwen'),
+    'Expected filtered current model output to show the active query.'
+  );
+  assert(
+    filteredCurrent.includes('match hints') &&
+      filteredCurrent.includes('Qwen'),
+    'Expected filtered current model output to include family hints.'
+  );
+
+  const filteredCodex = await renderModelCatalogs(config, 'codex', { query: 'gpt-5' });
+  assert(
+    filteredCodex.includes('provider     codex') &&
+      filteredCodex.includes('filter       gpt-5') &&
+      filteredCodex.includes('match hints'),
+    'Expected codex model search output to show the provider, filter, and hints.'
+  );
+
+  const missingMatches = await renderModelCatalogs(config, 'codex', { query: 'does-not-exist' });
+  assert(
+    missingMatches.includes('- (no models matched this filter)'),
+    'Expected model search output to explain when a filter matched no models.'
+  );
+
+  console.log('[models-smoke] All model catalog checks passed.');
+}
+
+void main().catch((error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`\n[models-smoke] Failed: ${message}`);
+  process.exitCode = 1;
+});

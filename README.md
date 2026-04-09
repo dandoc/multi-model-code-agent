@@ -139,6 +139,7 @@ npm run dev
 - `/model <name>` persists to `.env`
 - `/model default` resets to the provider default
 - `/models [current|all|provider]` shows model choices
+- `/models [current|all|provider] search <query>` filters model names and shows family hints
 - `/base-url <url>` persists to `.env`
 - `/api-key <value>`
 - `/workdir <path>`
@@ -164,6 +165,7 @@ This runs:
 - a `.env` persistence check
 - a path-boundary regression check
 - a session-history persistence and redaction check
+- a model-catalog search and family-hint regression check
 
 For a focused shell-selection regression check, run:
 
@@ -278,6 +280,8 @@ Inside the REPL you can inspect model choices with:
 /models ollama
 /models openai
 /models codex
+/models search qwen
+/models codex search gpt-5
 ```
 
 Behavior by provider:
@@ -285,6 +289,11 @@ Behavior by provider:
 - `ollama`: reads your locally installed models from `ollama list`
 - `openai`: fetches a live list from `/models` when `OPENAI_API_KEY` is set
 - `codex`: shows the provider default and explains that Codex CLI does not expose a live account model list
+
+Search behavior:
+
+- `/models ... search <query>` filters the visible model names before rendering
+- filtered results also include short family hints for well-known choices such as Qwen coder, Gemma, GPT-5.4, and Codex-oriented models
 
 ## Safety defaults
 

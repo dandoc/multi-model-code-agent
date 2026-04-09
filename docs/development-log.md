@@ -653,6 +653,7 @@ Summary:
 - added `/profiles search <query>` and `/profiles rename <old-name> --to <new-name>` for easier profile management
 - added `/profiles diff <name>` so a saved profile can be compared against the current runtime before load
 - `/profiles load <name>` now shows a runtime diff preview and asks for confirmation before resetting the conversation
+- `/models ... search <query>` now filters provider model lists and shows short family hints for common model families
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:

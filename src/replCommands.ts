@@ -1,3 +1,5 @@
+import type { ModelProvider } from './types.js';
+
 export function isWholeNumberText(value: string | undefined): boolean {
   return typeof value === 'string' && /^\d+$/.test(value.trim());
 }
@@ -145,6 +147,17 @@ export type ProfilesRequest =
   | {
       kind: 'delete';
       name: string;
+    }
+  | {
+      kind: 'invalid';
+      reason: string;
+    };
+
+export type ModelsRequest =
+  | {
+      kind: 'show';
+      scope: 'current' | 'all' | ModelProvider;
+      query?: string;
     }
   | {
       kind: 'invalid';
@@ -424,6 +437,60 @@ export function parseProfilesRequest(entry: string): ProfilesRequest {
     kind: 'invalid',
     reason:
       'Use /profiles, /profiles search <query>, /profiles diff <name>, /profiles save <name>, /profiles rename <old-name> --to <new-name>, /profiles load <name>, or /profiles delete <name>.',
+  };
+}
+
+export function parseModelsRequest(entry: string): ModelsRequest {
+  const args = entry
+    .slice('/models'.length)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (args.length === 0) {
+    return { kind: 'show', scope: 'current' };
+  }
+
+  const normalizeScope = (value: string): 'current' | 'all' | ModelProvider | null => {
+    const normalized = value.toLowerCase();
+    if (normalized === 'current' || normalized === 'all') {
+      return normalized;
+    }
+    if (normalized === 'ollama' || normalized === 'openai' || normalized === 'codex') {
+      return normalized;
+    }
+    return null;
+  };
+
+  let scope: 'current' | 'all' | ModelProvider = 'current';
+  let remaining = args;
+  const maybeScope = normalizeScope(args[0]!);
+  if (maybeScope) {
+    scope = maybeScope;
+    remaining = args.slice(1);
+  }
+
+  if (remaining.length === 0) {
+    return { kind: 'show', scope };
+  }
+
+  const mode = remaining[0]?.toLowerCase();
+  if (mode === 'search' || mode === 'find') {
+    const query = remaining.slice(1).join(' ').trim();
+    if (!query) {
+      return { kind: 'invalid', reason: 'Use /models [current|all|provider] search <query>.' };
+    }
+
+    return {
+      kind: 'show',
+      scope,
+      query,
+    };
+  }
+
+  return {
+    kind: 'invalid',
+    reason: 'Use /models, /models all, /models <ollama|openai|codex>, or /models [current|all|provider] search <query>.',
   };
 }
 
