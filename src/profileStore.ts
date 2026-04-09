@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { getAgentHomeDir } from './storagePaths.js';
 import type { AgentConfig } from './types.js';
 
 export type SavedProfile = {
@@ -21,12 +22,8 @@ type StoredProfilesFile = {
   profiles: SavedProfile[];
 };
 
-function getAgentHome(): string {
-  return process.env.MM_AGENT_HOME || path.join(process.env.USERPROFILE || process.cwd(), '.multi-model-code-agent');
-}
-
 function getProfilesPath(): string {
-  return path.join(getAgentHome(), 'profiles.json');
+  return path.join(getAgentHomeDir(), 'profiles.json');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -111,15 +108,52 @@ async function loadProfilesFile(): Promise<StoredProfilesFile> {
   throw new Error(`Profiles file is corrupted: ${profilesPath}`);
 }
 
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withProfilesLock<T>(action: () => Promise<T>): Promise<T> {
+  const agentHome = getAgentHomeDir();
+  await mkdir(agentHome, { recursive: true });
+  const lockDir = `${getProfilesPath()}.lock`;
+  const startedAt = Date.now();
+
+  while (true) {
+    try {
+      await mkdir(lockDir);
+      break;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'EEXIST') {
+        throw error;
+      }
+
+      if (Date.now() - startedAt > 5_000) {
+        throw new Error(`Timed out waiting for the profiles lock: ${lockDir}`);
+      }
+
+      await sleep(25);
+    }
+  }
+
+  try {
+    return await action();
+  } finally {
+    await rm(lockDir, { recursive: true, force: true });
+  }
+}
+
 async function writeProfilesFile(profiles: SavedProfile[]): Promise<void> {
-  const agentHome = getAgentHome();
+  const agentHome = getAgentHomeDir();
   await mkdir(agentHome, { recursive: true });
   const profilesPath = getProfilesPath();
+  const tempPath = `${profilesPath}.${process.pid}.${Date.now()}.tmp`;
   const payload: StoredProfilesFile = {
     version: 1,
     profiles: [...profiles].sort((left, right) => compareProfileNames(left.name, right.name)),
   };
-  await writeFile(profilesPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+  await writeFile(tempPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+  await rename(tempPath, profilesPath);
 }
 
 export async function listProfiles(): Promise<SavedProfile[]> {
@@ -134,7 +168,6 @@ export async function loadProfile(name: string): Promise<SavedProfile | null> {
 
 export async function saveProfile(name: string, config: AgentConfig): Promise<SavedProfile> {
   const normalizedName = normalizeProfileName(name);
-  const current = await listProfiles();
   const nextProfile: SavedProfile = {
     name: normalizedName,
     provider: config.provider,
@@ -147,30 +180,35 @@ export async function saveProfile(name: string, config: AgentConfig): Promise<Sa
     updatedAt: new Date().toISOString(),
   };
 
-  const nextProfiles = current.filter((profile) => profile.name !== normalizedName);
-  nextProfiles.push(nextProfile);
-  await writeProfilesFile(nextProfiles);
+  await withProfilesLock(async () => {
+    const current = await loadProfilesFile();
+    const nextProfiles = current.profiles.filter((profile) => profile.name !== normalizedName);
+    nextProfiles.push(nextProfile);
+    await writeProfilesFile(nextProfiles);
+  });
   return nextProfile;
 }
 
 export async function deleteProfile(name: string): Promise<boolean> {
   const normalizedName = normalizeProfileName(name);
-  const current = await listProfiles();
-  const nextProfiles = current.filter((profile) => profile.name !== normalizedName);
-  if (nextProfiles.length === current.length) {
-    return false;
-  }
-
-  if (nextProfiles.length === 0) {
-    const profilesPath = getProfilesPath();
-    if (existsSync(profilesPath)) {
-      await rm(profilesPath, { force: true });
+  return withProfilesLock(async () => {
+    const current = await loadProfilesFile();
+    const nextProfiles = current.profiles.filter((profile) => profile.name !== normalizedName);
+    if (nextProfiles.length === current.profiles.length) {
+      return false;
     }
-    return true;
-  }
 
-  await writeProfilesFile(nextProfiles);
-  return true;
+    if (nextProfiles.length === 0) {
+      const profilesPath = getProfilesPath();
+      if (existsSync(profilesPath)) {
+        await rm(profilesPath, { force: true });
+      }
+      return true;
+    }
+
+    await writeProfilesFile(nextProfiles);
+    return true;
+  });
 }
 
 export async function renderProfileList(currentConfig: AgentConfig): Promise<string> {
@@ -199,4 +237,3 @@ export async function renderProfileList(currentConfig: AgentConfig): Promise<str
 
   return lines.join('\n').trimEnd();
 }
-

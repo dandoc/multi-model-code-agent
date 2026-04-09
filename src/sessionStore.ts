@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import { appendFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 
+import { getAgentHomeDir } from './storagePaths.js';
 import type { AgentConfig, ChatMessage, ChatRole } from './types.js';
 
 type SessionConfigSnapshot = {
@@ -238,12 +238,7 @@ function buildSessionId(): string {
 }
 
 function getSessionRootDir(): string {
-  const override = process.env.MM_AGENT_HOME?.trim();
-  if (override) {
-    return path.resolve(override);
-  }
-
-  return path.join(os.homedir(), '.multi-model-code-agent');
+  return getAgentHomeDir();
 }
 
 function getSessionsDir(): string {

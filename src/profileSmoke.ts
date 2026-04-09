@@ -1,8 +1,10 @@
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import { deleteProfile, listProfiles, loadProfile, renderProfileList, saveProfile } from './profileStore.js';
+import { getAgentHomeDir } from './storagePaths.js';
 
 async function main(): Promise<void> {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'mmca-profile-smoke-'));
@@ -68,10 +70,63 @@ async function main(): Promise<void> {
       throw new Error('Rendered profile list is missing the codex profile summary.');
     }
 
+    const previousUserProfile = process.env.USERPROFILE;
+    delete process.env.MM_AGENT_HOME;
+    delete process.env.USERPROFILE;
+    const expectedFallbackHome = path.join(os.homedir(), '.multi-model-code-agent');
+    if (getAgentHomeDir() !== expectedFallbackHome) {
+      throw new Error('Profile storage should fall back to os.homedir() when MM_AGENT_HOME is unset.');
+    }
+    process.env.MM_AGENT_HOME = tempRoot;
+    if (previousUserProfile === undefined) {
+      delete process.env.USERPROFILE;
+    } else {
+      process.env.USERPROFILE = previousUserProfile;
+    }
+
+    await Promise.all([
+      saveProfile('concurrent-a', {
+        provider: 'ollama',
+        model: 'qwen2.5-coder:7b',
+        baseUrl: 'http://127.0.0.1:11434',
+        workdir: workdirA,
+        autoApprove: false,
+        maxTurns: 8,
+        temperature: 0.2,
+      }),
+      saveProfile('concurrent-b', {
+        provider: 'openai',
+        model: 'gpt-5.4',
+        baseUrl: 'https://api.example.test/v1',
+        workdir: workdirB,
+        autoApprove: true,
+        maxTurns: 24,
+        temperature: 0.9,
+      }),
+    ]);
+
+    const concurrentProfiles = await listProfiles();
+    if (!concurrentProfiles.some((profile) => profile.name === 'concurrent-a')) {
+      throw new Error('Concurrent profile save dropped profile concurrent-a.');
+    }
+    if (!concurrentProfiles.some((profile) => profile.name === 'concurrent-b')) {
+      throw new Error('Concurrent profile save dropped profile concurrent-b.');
+    }
+    const profilesFile = path.join(tempRoot, 'profiles.json');
+    if (!existsSync(profilesFile)) {
+      throw new Error('Profiles file was not created under MM_AGENT_HOME.');
+    }
+    const rawProfiles = await readFile(profilesFile, 'utf8');
+    if (!rawProfiles.includes('"concurrent-a"') || !rawProfiles.includes('"concurrent-b"')) {
+      throw new Error('Profiles file is missing one of the concurrently saved profiles.');
+    }
+
     const deleted = await deleteProfile('remote-codex');
     if (!deleted) {
       throw new Error('Expected remote-codex profile to be deleted.');
     }
+    await deleteProfile('concurrent-a');
+    await deleteProfile('concurrent-b');
 
     const remaining = await listProfiles();
     if (remaining.length !== 1 || remaining[0]?.name !== 'local-qwen') {
