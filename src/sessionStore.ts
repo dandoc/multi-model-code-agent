@@ -274,6 +274,7 @@ function isLowSignalSessionCommand(command: string): boolean {
     '/sessions',
     '/session',
     '/resume',
+    '/title',
     '/config',
     '/models',
     '/tools',

@@ -97,6 +97,23 @@ async function appendSessionMessageFixture(
   );
 }
 
+async function appendSessionTitleFixture(
+  sessionsDir: string,
+  sessionId: string,
+  title: string
+): Promise<void> {
+  const sessionPath = path.join(sessionsDir, `${sessionId}.jsonl`);
+  await appendFile(
+    sessionPath,
+    `${JSON.stringify({
+      type: 'title',
+      timestamp: '2026-04-08T00:00:02.000Z',
+      title,
+    })}\n`,
+    'utf8'
+  );
+}
+
 async function main(): Promise<void> {
   const startedAt = Date.now();
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'mmca-session-smoke-'));
@@ -591,6 +608,7 @@ async function main(): Promise<void> {
     const activeFixtureId = '2026-01-03T00-00-00-000Z-active-fixture';
     const idleOldFixtureId = '2026-01-01T00-00-00-000Z-idle-old';
     const idleNewFixtureId = '2026-01-02T00-00-00-000Z-idle-new';
+    const idleRetitledFixtureId = '2026-01-04T00-00-00-000Z-idle-retitled';
 
     await writeSessionFixture(
       managementSessionsDir,
@@ -625,6 +643,18 @@ async function main(): Promise<void> {
       'qwen2.5-coder:3b',
       'startup'
     );
+    await writeSessionFixture(
+      managementSessionsDir,
+      idleRetitledFixtureId,
+      path.join(managementRoot, 'workspace-idle-retitled'),
+      'qwen2.5-coder:3b',
+      'startup'
+    );
+    await appendSessionTitleFixture(
+      managementSessionsDir,
+      idleRetitledFixtureId,
+      'Retitled idle fixture'
+    );
 
     const deleteCurrentPlan = await planSessionDelete(
       managementCurrentStore.sessionId,
@@ -643,21 +673,35 @@ async function main(): Promise<void> {
     }
     await deleteSessionEntries([deleteActivePlan.entry]);
 
-    const idleCleanupPlan = await planIdleSessionCleanup(managementCurrentStore.sessionId, 1);
+    const idleCleanupPlan = await planIdleSessionCleanup(managementCurrentStore.sessionId, 2);
     if (
-      idleCleanupPlan.entries.length !== 1 ||
-      idleCleanupPlan.entries[0]?.sessionId !== idleOldFixtureId
+      idleCleanupPlan.entries.length !== 2 ||
+      !idleCleanupPlan.entries.some((entry) => entry.sessionId === idleOldFixtureId) ||
+      !idleCleanupPlan.entries.some((entry) => entry.sessionId === idleNewFixtureId)
     ) {
-      throw new Error('Idle cleanup planning should pick the oldest idle fixture first.');
+      throw new Error('Idle cleanup planning should include plain idle fixtures first.');
     }
     await deleteSessionEntries(idleCleanupPlan.entries);
+
+    const postCleanupComparison = await renderSessionComparison(10, managementCurrentStore.sessionId);
+    if (postCleanupComparison.includes(idleRetitledFixtureId)) {
+      throw new Error('Retitled idle sessions should stay hidden from default session comparison.');
+    }
+
+    const remainingBeforePrune = await listRecentSessions(10);
+    const retitledIdleEntry = remainingBeforePrune.find(
+      (entry) => entry.sessionId === idleRetitledFixtureId
+    );
+    if (!retitledIdleEntry || retitledIdleEntry.title !== 'Retitled idle fixture') {
+      throw new Error('Retitled idle fixture should remain discoverable with its custom title.');
+    }
 
     const prunePlan = await planSessionPrune(1, managementCurrentStore.sessionId);
     if (
       prunePlan.entries.length !== 1 ||
-      prunePlan.entries[0]?.sessionId !== idleNewFixtureId
+      prunePlan.entries[0]?.sessionId !== idleRetitledFixtureId
     ) {
-      throw new Error('Session prune planning should delete the remaining older fixture.');
+      throw new Error('Session prune planning should delete the remaining retitled idle fixture.');
     }
     await deleteSessionEntries(prunePlan.entries);
 

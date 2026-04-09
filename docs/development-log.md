@@ -618,6 +618,7 @@ Summary:
 - added `/title <text>` so the current session can be renamed explicitly instead of relying only on the first saved prompt
 - title overrides are stored in the session JSONL log and automatically flow through `/sessions`, comparison, summary, resume recap, and status views
 - expanded session smoke coverage so title overrides stay visible in list, history, summary, status, and resume output
+- `/title` now behaves as metadata-only so retitling a startup-only session does not make it look active in compare, status, or idle cleanup flows
 
 Validation:
 

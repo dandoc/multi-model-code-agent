@@ -648,7 +648,6 @@ async function main(): Promise<void> {
           continue;
         }
 
-        await logSessionEvent(() => sessionStore.logCommand(entry));
         await logSessionEvent(() => sessionStore.logTitle(nextTitle));
         console.log(`\nSession title updated to: ${nextTitle}`);
         continue;
