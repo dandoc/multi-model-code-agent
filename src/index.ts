@@ -29,6 +29,7 @@ import {
 import {
   buildRuntimeTransitionPreflight,
   isModelCompatible,
+  normalizeProviderBaseUrl,
   providerBaseUrlEnvKey,
   providerModelEnvKey,
   renderModelCatalogs,
@@ -986,7 +987,7 @@ async function main(): Promise<void> {
           [providerModelEnvKey(provider)]: nextModel,
         };
         if (nextBaseUrlKey) {
-          updates[nextBaseUrlKey] = nextBaseUrl;
+          updates[nextBaseUrlKey] = nextConfig.baseUrl;
         }
         const saved = await persistLaunchSettings(updates);
         await logSessionEvent(() => sessionStore.logConfig('provider switch', config));
@@ -1057,7 +1058,8 @@ async function main(): Promise<void> {
           continue;
         }
 
-        const nextBaseUrl = entry.slice('/base-url '.length).trim().replace(/\/+$/, '');
+        const rawBaseUrl = entry.slice('/base-url '.length).trim();
+        const nextBaseUrl = normalizeProviderBaseUrl(config.provider, rawBaseUrl);
         const nextConfig = updateConfig(config, {
           baseUrl: nextBaseUrl,
           requestTimeoutMs: config.requestTimeoutMs,
@@ -1072,7 +1074,11 @@ async function main(): Promise<void> {
           currentBaseUrlKey ? { [currentBaseUrlKey]: nextBaseUrl } : {}
         );
         await logSessionEvent(() => sessionStore.logConfig('base-url update', config));
-        console.log(`\nBase URL updated. Conversation reset.${saved ? ' Saved to .env.' : ''}`);
+        const normalizationNote =
+          rawBaseUrl.trim().replace(/\/+$/, '') !== nextBaseUrl
+            ? ` Normalized endpoint URL to base URL: ${nextBaseUrl}.`
+            : '';
+        console.log(`\nBase URL updated.${normalizationNote} Conversation reset.${saved ? ' Saved to .env.' : ''}`);
         continue;
       }
 

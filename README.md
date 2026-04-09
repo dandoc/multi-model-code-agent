@@ -320,6 +320,7 @@ Doctor behavior:
 - runtime request failures are also classified by provider, so auth/model/base-url/login/time-out issues return clearer next steps instead of one generic error
 - provider/model/profile/runtime switches now run a readiness preflight before the new runtime is applied
 - `/provider`, `/model`, and `/base-url` print preflight warnings immediately when the next runtime looks risky
+- `/base-url` now trims common endpoint suffixes like `/chat/completions`, `/responses`, `/models`, or Ollama `/api/chat` back to the provider base URL automatically
 
 Live smoke behavior:
 

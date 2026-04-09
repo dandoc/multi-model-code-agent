@@ -661,6 +661,7 @@ Summary:
 - runtime request failures are now classified by provider so Ollama/OpenAI-compatible/Codex errors return provider-specific causes and next steps
 - Ollama/OpenAI-compatible chat requests now retry once on transient timeout/network/429/5xx failures, with adapter smoke coverage for retry vs non-retry paths
 - provider/model/base-url switches now run a quick runtime preflight and surface readiness warnings before resetting the conversation
+- provider base URLs now auto-normalize common endpoint paths like `/chat/completions`, `/responses`, `/models`, and Ollama `/api/chat` back to the actual server root
 - `/profiles load` and `/resume runtime` now include the same preflight in their preview/confirm flow, so missing keys, missing local models, or missing Codex login show up before the runtime is applied
 - saved profiles and runtime-aware resume now preserve the effective request-timeout setting as part of the runtime snapshot
 - `/models ... smoke [quick|protocol|all]` now checks both a plain live completion path and a structured JSON/message-envelope path, while still skipping providers that already fail blocking readiness checks

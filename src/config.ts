@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import {
   isModelCompatible,
+  normalizeProviderBaseUrl,
   providerDefaultBaseUrl as getProviderDefaultBaseUrl,
   providerDefaultModel as getProviderDefaultModel,
   resolveStoredModelForProvider,
@@ -144,7 +145,13 @@ export function createConfigFromInputs(argv: string[]): ParsedCliInput {
   const config: AgentConfig = {
     provider,
     model,
-    baseUrl: (baseUrlInput || getProviderDefaultBaseUrl(provider)).replace(/\/+$/, ''),
+    baseUrl:
+      provider === 'codex'
+        ? ''
+        : normalizeProviderBaseUrl(
+            provider,
+            baseUrlInput || getProviderDefaultBaseUrl(provider)
+          ),
     apiKey:
       typeof parsed.flags['api-key'] === 'string'
         ? parsed.flags['api-key']
@@ -210,9 +217,20 @@ export function renderConfigSummary(config: AgentConfig): string {
 }
 
 export function updateConfig(current: AgentConfig, patch: Partial<AgentConfig>): AgentConfig {
-  return {
+  const next = {
     ...current,
     ...patch,
+  };
+
+  return {
+    ...next,
+    baseUrl:
+      next.provider === 'codex'
+        ? ''
+        : normalizeProviderBaseUrl(
+            next.provider,
+            next.baseUrl || getProviderDefaultBaseUrl(next.provider)
+          ),
   };
 }
 

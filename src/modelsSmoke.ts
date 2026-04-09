@@ -1,10 +1,12 @@
 import {
   buildRuntimeTransitionPreflight,
   describeModelFamily,
+  normalizeProviderBaseUrl,
   renderModelCatalogs,
   renderModelDiagnostics,
   renderRuntimeTransitionPreflight,
 } from './providerModels.js';
+import { updateConfig } from './config.js';
 import { buildSystemPrompt } from './prompt.js';
 import { createTools } from './tools.js';
 import { diagnoseProviderFailure } from './modelAdapters.js';
@@ -38,6 +40,27 @@ async function main(): Promise<void> {
   assert(
     codexHints.some((hint) => hint.includes('faster Codex-oriented option')),
     'Expected GPT-5.3 Codex family hints to mention the faster Codex-oriented option.'
+  );
+
+  assert(
+    normalizeProviderBaseUrl('openai', 'https://api.example.test/v1/chat/completions/') ===
+      'https://api.example.test/v1',
+    'Expected OpenAI-compatible endpoint URLs to normalize back to the base URL.'
+  );
+  assert(
+    normalizeProviderBaseUrl('ollama', 'http://127.0.0.1:11434/api/chat') ===
+      'http://127.0.0.1:11434',
+    'Expected Ollama endpoint URLs to normalize back to the server root.'
+  );
+
+  const normalizedRuntime = updateConfig(config, {
+    provider: 'openai',
+    model: 'gpt-4.1',
+    baseUrl: 'https://api.example.test/v1/chat/completions',
+  });
+  assert(
+    normalizedRuntime.baseUrl === 'https://api.example.test/v1',
+    'Expected runtime updates to store a normalized OpenAI-compatible base URL.'
   );
 
   const filteredCurrent = await renderModelCatalogs(config, 'current', { query: 'qwen' });

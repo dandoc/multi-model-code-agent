@@ -126,6 +126,25 @@ export function providerDefaultBaseUrl(provider: ModelProvider): string {
   }
 }
 
+export function normalizeProviderBaseUrl(provider: ModelProvider, input: string): string {
+  if (provider === 'codex') {
+    return '';
+  }
+
+  let normalized = input.trim().replace(/\/+$/, '');
+  if (!normalized) {
+    return normalized;
+  }
+
+  if (provider === 'openai') {
+    normalized = normalized.replace(/\/(?:chat\/completions|responses|models)$/i, '');
+    return normalized.replace(/\/+$/, '');
+  }
+
+  normalized = normalized.replace(/\/api\/(?:chat|generate|tags|embeddings)$/i, '');
+  return normalized.replace(/\/+$/, '');
+}
+
 export function isModelCompatible(provider: ModelProvider, model: string): boolean {
   const normalized = model.trim().toLowerCase();
   if (!normalized) {
@@ -420,7 +439,10 @@ export function resolveProviderRuntime(
     baseUrl:
       provider === 'codex'
         ? ''
-        : (process.env[providerBaseUrlEnvKey(provider) ?? ''] ?? providerDefaultBaseUrl(provider)),
+        : normalizeProviderBaseUrl(
+            provider,
+            process.env[providerBaseUrlEnvKey(provider) ?? ''] ?? providerDefaultBaseUrl(provider)
+          ),
     apiKey: provider === 'openai' ? process.env.OPENAI_API_KEY || undefined : undefined,
   };
 }
