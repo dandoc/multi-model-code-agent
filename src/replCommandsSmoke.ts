@@ -311,6 +311,18 @@ async function main(): Promise<void> {
     'Expected /models all doctor to parse correctly.'
   );
 
+  const modelsCurrentSmoke = parseModelsRequest('/models smoke');
+  assert(
+    modelsCurrentSmoke.kind === 'smoke' && modelsCurrentSmoke.scope === 'current',
+    'Expected /models smoke to target the current provider.'
+  );
+
+  const modelsProviderSmoke = parseModelsRequest('/models codex smoke');
+  assert(
+    modelsProviderSmoke.kind === 'smoke' && modelsProviderSmoke.scope === 'codex',
+    'Expected /models <provider> smoke to parse correctly.'
+  );
+
   const modelsInvalid = parseModelsRequest('/models current search');
   assert(
     modelsInvalid.kind === 'invalid',
@@ -321,6 +333,12 @@ async function main(): Promise<void> {
   assert(
     modelsDoctorInvalid.kind === 'invalid',
     'Expected malformed /models doctor syntax to be rejected.'
+  );
+
+  const modelsSmokeInvalid = parseModelsRequest('/models smoke now');
+  assert(
+    modelsSmokeInvalid.kind === 'invalid',
+    'Expected malformed /models smoke syntax to be rejected.'
   );
 
   const temperatureUpdate = parseTemperatureRequest('/temperature 0.7');

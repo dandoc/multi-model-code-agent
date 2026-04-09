@@ -21,14 +21,14 @@ type RenderCatalogOptions = {
 type DiagnosticLevel = 'ok' | 'warn' | 'error' | 'info';
 type DiagnosticStatus = 'ready' | 'warning' | 'blocked';
 
-type DiagnosticCheck = {
+export type DiagnosticCheck = {
   level: DiagnosticLevel;
   label: string;
   detail: string;
   hint?: string;
 };
 
-type ProviderDiagnostics = {
+export type ProviderDiagnostics = {
   provider: ModelProvider;
   currentModel: string;
   baseUrl: string;
@@ -403,7 +403,7 @@ function listCodexModels(currentModel: string): { models: string[]; notes: strin
   };
 }
 
-function resolveProviderRuntime(
+export function resolveProviderRuntime(
   config: AgentConfig,
   provider: ModelProvider
 ): { model: string; baseUrl: string; apiKey?: string } {
@@ -769,12 +769,20 @@ export async function renderModelDiagnostics(
   scope: 'current' | 'all' | ModelProvider,
   deps: ProviderDiagnosticDeps = {}
 ): Promise<string> {
+  const diagnostics = await collectProviderDiagnostics(config, scope, deps);
+  return diagnostics.map((entry) => renderProviderDiagnostics(entry)).join('\n\n');
+}
+
+export async function collectProviderDiagnostics(
+  config: AgentConfig,
+  scope: 'current' | 'all' | ModelProvider,
+  deps: ProviderDiagnosticDeps = {}
+): Promise<ProviderDiagnostics[]> {
   const providers: ModelProvider[] =
     scope === 'all' ? ['ollama', 'openai', 'codex'] : [scope === 'current' ? config.provider : scope];
-  const diagnostics = await Promise.all(
+  return await Promise.all(
     providers.map((provider) => buildProviderDiagnostics(config, provider, deps))
   );
-  return diagnostics.map((entry) => renderProviderDiagnostics(entry)).join('\n\n');
 }
 
 export async function buildRuntimeTransitionPreflight(

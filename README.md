@@ -141,6 +141,7 @@ npm run dev
 - `/models [current|all|provider]` shows model choices
 - `/models [current|all|provider] search <query>` filters model names and shows family hints
 - `/models [current|all|provider] doctor` checks provider readiness and common failure causes
+- `/models [current|all|provider] smoke` runs a tiny live completion check for the selected provider scope
 - `/base-url <url>` persists to `.env`
 - `/api-key <value>`
 - `/workdir <path>`
@@ -172,6 +173,7 @@ This runs:
 - a model-catalog search and family-hint regression check
 - a provider adapter retry/fallback regression check
 - a provider-readiness doctor regression check
+- a live-provider smoke-matrix regression check
 
 For a focused shell-selection regression check, run:
 
@@ -292,6 +294,8 @@ Inside the REPL you can inspect model choices with:
 /models codex search gpt-5
 /models doctor
 /models all doctor
+/models smoke
+/models all smoke
 ```
 
 Behavior by provider:
@@ -314,6 +318,12 @@ Doctor behavior:
 - runtime request failures are also classified by provider, so auth/model/base-url/login/time-out issues return clearer next steps instead of one generic error
 - provider/model/profile/runtime switches now run a readiness preflight before the new runtime is applied
 - `/provider`, `/model`, and `/base-url` print preflight warnings immediately when the next runtime looks risky
+
+Live smoke behavior:
+
+- `/models ... smoke` runs a tiny real completion request (`Reply with exactly OK.`) through the selected provider scope
+- providers with obvious blocking readiness issues are skipped before the live request runs, and the output shows why
+- use `npm run smoke:live -- current`, `npm run smoke:live -- all`, or `npm run smoke:live -- codex` for the same live matrix outside the REPL
 - `/profiles load` and `/resume runtime` fold the same preflight into their preview/confirm flow before they reset the conversation
 
 Session tuning:

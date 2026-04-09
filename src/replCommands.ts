@@ -172,9 +172,13 @@ export type ModelsRequest =
       scope: 'current' | 'all' | ModelProvider;
     }
   | {
+      kind: 'smoke';
+      scope: 'current' | 'all' | ModelProvider;
+    }
+  | {
       kind: 'invalid';
-    reason: string;
-  };
+      reason: string;
+    };
 
 export type RuntimeSettingRequest =
   | {
@@ -509,6 +513,17 @@ export function parseModelsRequest(entry: string): ModelsRequest {
     };
   }
 
+  if (mode === 'smoke') {
+    if (remaining.length !== 1) {
+      return { kind: 'invalid', reason: 'Use /models [current|all|provider] smoke.' };
+    }
+
+    return {
+      kind: 'smoke',
+      scope,
+    };
+  }
+
   if (mode === 'search' || mode === 'find') {
     const query = remaining.slice(1).join(' ').trim();
     if (!query) {
@@ -524,7 +539,7 @@ export function parseModelsRequest(entry: string): ModelsRequest {
 
   return {
     kind: 'invalid',
-    reason: 'Use /models, /models all, /models <ollama|openai|codex>, /models [current|all|provider] search <query>, or /models [current|all|provider] doctor.',
+    reason: 'Use /models, /models all, /models <ollama|openai|codex>, /models [current|all|provider] search <query>, /models [current|all|provider] doctor, or /models [current|all|provider] smoke.',
   };
 }
 

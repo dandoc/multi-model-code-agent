@@ -14,6 +14,7 @@ import {
   updateConfig,
 } from './config.js';
 import { loadDotEnv, updateDotEnv } from './env.js';
+import { renderLiveProviderSmokeResults, runLiveProviderSmoke } from './liveProviderMatrix.js';
 import { createModelAdapter, diagnoseProviderFailure } from './modelAdapters.js';
 import {
   deleteProfile,
@@ -150,6 +151,8 @@ function printReplHelp(): void {
       '                       Filter available model names and show family hints',
       '  /models [scope] doctor',
       '                       Diagnose provider readiness and common failure causes',
+      '  /models [scope] smoke',
+      '                       Run a small live completion smoke for the selected provider scope',
       '  /base-url <url>       Switch base URL and save it to .env',
       '  /api-key <value>      Set API key for this session',
       '  /workdir <path>       Change workdir',
@@ -1035,6 +1038,11 @@ async function main(): Promise<void> {
 
         if (request.kind === 'doctor') {
           console.log(`\n${await renderModelDiagnostics(config, request.scope)}`);
+          continue;
+        }
+
+        if (request.kind === 'smoke') {
+          console.log(`\n${renderLiveProviderSmokeResults(await runLiveProviderSmoke(config, request.scope))}`);
           continue;
         }
 
