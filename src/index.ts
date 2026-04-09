@@ -13,7 +13,7 @@ import {
   updateConfig,
 } from './config.js';
 import { loadDotEnv, updateDotEnv } from './env.js';
-import { createModelAdapter } from './modelAdapters.js';
+import { createModelAdapter, diagnoseProviderFailure } from './modelAdapters.js';
 import {
   deleteProfile,
   loadProfile,
@@ -200,6 +200,32 @@ function formatSessionEntryLabel(sessionId: string, title: string, lastActivityA
   return `- ${sessionId} | ${title} | last active ${lastActivityAt}`;
 }
 
+function renderProviderFailureReply(config: AgentConfig, error: unknown): string {
+  const diagnosis = diagnoseProviderFailure(config, error);
+  const lines = [
+    '요청 처리 중 공급자 오류가 발생했습니다.',
+    `Provider: ${config.provider}`,
+    `Summary: ${diagnosis.summary}`,
+  ];
+
+  if (diagnosis.likelyCauses.length > 0) {
+    lines.push('Likely causes:');
+    for (const cause of diagnosis.likelyCauses) {
+      lines.push(`- ${cause}`);
+    }
+  }
+
+  if (diagnosis.nextSteps.length > 0) {
+    lines.push('Next steps:');
+    for (const step of diagnosis.nextSteps) {
+      lines.push(`- ${step}`);
+    }
+  }
+
+  lines.push(`Raw detail: ${diagnosis.detail}`);
+  return lines.join('\n');
+}
+
 function ensureProviderReady(config: AgentConfig): void {
   if (config.provider === 'openai' && !config.apiKey) {
     throw new Error(
@@ -301,12 +327,7 @@ async function main(): Promise<void> {
       await logSessionEvent(() => sessionStore.logMessage('assistant', reply));
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const failureReply = [
-        '요청 처리 중 오류가 발생했습니다.',
-        message,
-        '같은 요청을 다시 시도하거나, 범위를 조금 줄이거나, 더 빠른 모델로 바꿔보세요.',
-      ].join('\n');
+      const failureReply = renderProviderFailureReply(config, error);
       console.log(`\n[assistant] ${failureReply}\n`);
       await logSessionEvent(() => sessionStore.logMessage('assistant', failureReply));
       return false;

@@ -307,6 +307,7 @@ Doctor behavior:
 - `ollama` doctor checks the local `ollama list` command, base URL shape, and whether the expected model is installed
 - `openai` doctor checks base URL shape, whether an API key is configured, and whether `/models` is reachable
 - `codex` doctor checks Codex CLI availability and ChatGPT login status
+- runtime request failures are also classified by provider, so auth/model/base-url/login/time-out issues return clearer next steps instead of one generic error
 
 Session tuning:
 
