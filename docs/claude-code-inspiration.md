@@ -2,7 +2,7 @@
 
 ## Why this document exists
 
-This project did not appear out of nowhere. It grew out of a larger effort to study the methodology visible in Claude Code's source and workflow, then test those ideas in a separate codebase that is free to target many different LLMs.
+This project did not appear out of nowhere. It grew out of a larger effort to study the methodology visible in Claude Code's workflow and observable product behavior, then test those ideas in a separate codebase that is free to target many different LLMs.
 
 The long-term goal is bigger than this CLI alone:
 
@@ -34,7 +34,7 @@ These are the parts that felt worth studying and carrying forward.
 
 ## Why not copy Claude Code directly
 
-The point of this repository is not to recreate Claude Code source code line by line.
+The point of this repository is not to recreate Claude Code implementation details line by line.
 
 That would be the wrong goal for this project for several reasons:
 

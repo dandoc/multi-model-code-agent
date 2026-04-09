@@ -348,3 +348,15 @@
 
 - 문서 변경
 - `npm run smoke:packaging`
+
+### 법적 오해를 줄이는 문구 정리
+
+요약:
+
+- 프로젝트 소개 문서의 표현을 더 안전하게 다듬어, Claude Code의 소스코드를 활용했다는 뉘앙스 대신 워크플로우와 외부에서 관찰 가능한 제품 동작에서 보이는 방법론을 참고했다는 방향으로 정리
+- `source`, `소스코드`처럼 직접 코드 활용으로 읽힐 수 있는 표현을 줄이고, `methodology`, `inspiration`, `independent implementation` 쪽 표현으로 통일
+
+검증:
+
+- 문서 변경
+- `npm run smoke:packaging`

@@ -713,3 +713,15 @@ Validation:
 
 - doc-only change
 - `npm run smoke:packaging`
+
+### 2026-04-10 - Safer project-framing wording
+
+Summary:
+
+- tightened project-framing language so the docs describe inspiration from Claude Code workflow and observable behavior, not use of Claude Code source code
+- replaced wording that could be misread as direct source-code reuse with safer wording around methodology, inspiration, and independent implementation
+
+Validation:
+
+- doc-only change
+- `npm run smoke:packaging`

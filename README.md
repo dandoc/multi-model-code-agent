@@ -2,7 +2,7 @@
 
 `multi-model-code-agent` is a small TypeScript CLI that gives you a Claude Code style workflow with pluggable backends.
 
-This repository is part of a broader project: study the methodology visible in Claude Code's source and workflow, adapt the parts that are genuinely useful, and turn that research into a vibe-coding tool that can work well across many different LLMs instead of being tied to one model or one vendor. The CLI in this repo is the practical testbed for that goal.
+This repository is part of a broader project: study the methodology visible in Claude Code's workflow and observable product behavior, adapt the parts that are genuinely useful, and turn that research into a vibe-coding tool that can work well across many different LLMs instead of being tied to one model or one vendor. The CLI in this repo is the practical testbed for that goal.
 
 In other words, the project intentionally borrows many methodological ideas from Claude Code, especially around:
 
