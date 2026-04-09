@@ -74,6 +74,24 @@ async function main(): Promise<void> {
     'Expected /sessions compare all <count> to include idle sessions.'
   );
 
+  const sessionsSummaryCurrent = parseSessionsRequest('/sessions summary');
+  assert(
+    sessionsSummaryCurrent.kind === 'summary' &&
+      sessionsSummaryCurrent.sessionRef === 'current' &&
+      sessionsSummaryCurrent.count === 5,
+    'Expected bare /sessions summary to target the current session.'
+  );
+
+  const sessionsSummaryById = parseSessionsRequest(
+    '/sessions summary 2026-04-08T08-54-23-747Z-l4o0ov 7'
+  );
+  assert(
+    sessionsSummaryById.kind === 'summary' &&
+      sessionsSummaryById.sessionRef === '2026-04-08T08-54-23-747Z-l4o0ov' &&
+      sessionsSummaryById.count === 7,
+    'Expected /sessions summary <session-id> <count> to parse correctly.'
+  );
+
   const sessionsInvalid = parseSessionsRequest('/sessions 2026-04-08T08-54-23-747Z-l4o0ov');
   assert(
     sessionsInvalid.kind === 'invalid',

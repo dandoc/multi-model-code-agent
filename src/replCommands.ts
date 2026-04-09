@@ -71,6 +71,11 @@ export type SessionsRequest =
       count: number;
     }
   | {
+      kind: 'summary';
+      sessionRef: string;
+      count: number;
+    }
+  | {
       kind: 'compare';
       count: number;
       includeIdle: boolean;
@@ -97,6 +102,38 @@ export function parseSessionsRequest(entry: string): SessionsRequest {
   }
 
   const mode = args[0]?.toLowerCase();
+  if (mode === 'summary' || mode === 'show') {
+    if (args.length === 1) {
+      return {
+        kind: 'summary',
+        sessionRef: 'current',
+        count: 5,
+      };
+    }
+
+    if (args.length === 2) {
+      if (isWholeNumberText(args[1])) {
+        return {
+          kind: 'summary',
+          sessionRef: 'current',
+          count: parsePositiveCount(args[1], 5, 20),
+        };
+      }
+
+      return {
+        kind: 'summary',
+        sessionRef: args[1],
+        count: 5,
+      };
+    }
+
+    return {
+      kind: 'summary',
+      sessionRef: args[1],
+      count: parsePositiveCount(args[2], 5, 20),
+    };
+  }
+
   if (mode === 'compare') {
     if (args.length === 1) {
       return {
@@ -177,7 +214,7 @@ export function parseSessionsRequest(entry: string): SessionsRequest {
   return {
     kind: 'invalid',
     reason:
-      'Use /sessions [count], /sessions compare [count], /sessions compare all [count], or /sessions search <query> [count]. For a specific session use /history <session-id> or /resume <session-id>.',
+      'Use /sessions [count], /sessions summary <current|latest|session-id> [count], /sessions compare [count], /sessions compare all [count], or /sessions search <query> [count]. For a specific session use /history <session-id> or /resume <session-id>.',
   };
 }
 

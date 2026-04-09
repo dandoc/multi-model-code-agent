@@ -579,6 +579,48 @@ function summarizeSessionActivity(events: SessionEvent[]): SessionActivitySummar
   };
 }
 
+function findFirstMeaningfulUserMessage(
+  events: SessionEvent[]
+): Extract<SessionEvent, { type: 'message' }> | undefined {
+  return events.find(
+    (event): event is Extract<SessionEvent, { type: 'message' }> =>
+      event.type === 'message' &&
+      event.role === 'user' &&
+      event.content.trim().length > 0 &&
+      !isLowSignalSessionMessage(event.content)
+  );
+}
+
+function findLastUserMessage(
+  events: SessionEvent[]
+): Extract<SessionEvent, { type: 'message' }> | undefined {
+  const userMessages = events.filter(
+    (event): event is Extract<SessionEvent, { type: 'message' }> =>
+      event.type === 'message' && event.role === 'user' && event.content.trim().length > 0
+  );
+  return userMessages.at(-1);
+}
+
+function findLastAssistantMessage(
+  events: SessionEvent[]
+): Extract<SessionEvent, { type: 'message' }> | undefined {
+  const assistantMessages = events.filter(
+    (event): event is Extract<SessionEvent, { type: 'message' }> =>
+      event.type === 'message' && event.role === 'assistant' && event.content.trim().length > 0
+  );
+  return assistantMessages.at(-1);
+}
+
+function findLastMeaningfulCommand(
+  events: SessionEvent[]
+): Extract<SessionEvent, { type: 'command' }> | undefined {
+  const commands = events.filter(
+    (event): event is Extract<SessionEvent, { type: 'command' }> =>
+      event.type === 'command' && !isLowSignalSessionCommand(event.command)
+  );
+  return commands.at(-1);
+}
+
 export async function listRecentSessions(limit = 8): Promise<SessionListEntry[]> {
   return (await scanRecentSessions(limit)).entries;
 }
@@ -747,6 +789,101 @@ export async function renderSessionComparison(
   }
 
   return lines.join('\n').trimEnd();
+}
+
+export async function renderSessionSummary(sessionPath: string, limit = 5): Promise<string> {
+  if (!existsSync(sessionPath)) {
+    return `Session file not found: ${sessionPath}`;
+  }
+
+  const loaded = await loadSessionEvents(sessionPath);
+  if (loaded.readError) {
+    return `Session log could not be read: ${loaded.readError}`;
+  }
+
+  const events = loaded.events;
+  if (events.length === 0) {
+    if (loaded.malformedLineCount > 0) {
+      return `Session log is corrupted: no readable events found in ${sessionPath} (${formatMalformedLineWarning(loaded.malformedLineCount)}).`;
+    }
+
+    return 'No session events were recorded.';
+  }
+
+  const startedEvent = events.find((event) => event.type === 'session_started');
+  if (!startedEvent || startedEvent.type !== 'session_started') {
+    return `Session log is corrupted: missing a readable session_started event in ${sessionPath}.`;
+  }
+
+  const summary = summarizeSessionActivity(events);
+  const title = deriveSessionTitle(events, startedEvent.reason);
+  const firstUserMessage = findFirstMeaningfulUserMessage(events);
+  const lastUserMessage = findLastUserMessage(events);
+  const lastAssistantMessage = findLastAssistantMessage(events);
+  const lastMeaningfulCommand = findLastMeaningfulCommand(events);
+  const visibleEvents = events.filter((event) => event.type !== 'session_started').slice(-limit);
+
+  const lines = [
+    `Session summary: ${startedEvent.sessionId}`,
+    `Path: ${sessionPath}`,
+    `Title: ${title}`,
+    `Started: ${formatSessionTimestamp(startedEvent.timestamp)}`,
+    `Last active: ${formatSessionTimestamp(events.at(-1)?.timestamp ?? startedEvent.timestamp)}`,
+    `Provider/model: ${startedEvent.config.provider} / ${startedEvent.config.model || '(provider default)'}`,
+    `Workdir: ${startedEvent.config.workdir}`,
+    `Reason: ${startedEvent.reason}`,
+    `Activity: user=${summary.userMessages}, assistant=${summary.assistantMessages}, repl commands=${summary.replCommands}, config=${summary.configChanges}, total=${summary.totalEvents}`,
+    `Profile: ${summary.profile}`,
+  ];
+
+  if (loaded.malformedLineCount > 0) {
+    lines.push(`Warning: ${formatMalformedLineWarning(loaded.malformedLineCount)} while reading this session.`);
+  }
+
+  if (firstUserMessage) {
+    lines.push(`First request: ${truncateInline(firstUserMessage.content)}`);
+  }
+
+  if (lastUserMessage) {
+    lines.push(`Last user message: ${truncateInline(lastUserMessage.content)}`);
+  }
+
+  if (lastAssistantMessage) {
+    lines.push(`Last assistant reply: ${truncateInline(lastAssistantMessage.content)}`);
+  }
+
+  if (lastMeaningfulCommand) {
+    lines.push(`Last meaningful command: ${lastMeaningfulCommand.command}`);
+  }
+
+  lines.push(`Recent events (${visibleEvents.length}):`);
+
+  if (visibleEvents.length === 0) {
+    lines.push('- No user-facing events yet.');
+    return lines.join('\n');
+  }
+
+  for (const event of visibleEvents) {
+    const time = formatTime(event.timestamp);
+
+    if (event.type === 'message') {
+      lines.push(`- [${time}] ${event.role}: ${truncateInline(event.content)}`);
+      continue;
+    }
+
+    if (event.type === 'command') {
+      lines.push(`- [${time}] command: ${event.command}`);
+      continue;
+    }
+
+    if (event.type === 'config') {
+      lines.push(
+        `- [${time}] config (${event.reason}): provider=${event.config.provider}, model=${event.config.model || '(provider default)'}, workdir=${event.config.workdir}`
+      );
+    }
+  }
+
+  return lines.join('\n');
 }
 
 export async function renderSessionHistory(sessionPath: string, limit = 12): Promise<string> {

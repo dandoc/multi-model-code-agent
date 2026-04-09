@@ -522,3 +522,18 @@ Validation:
 - `npm run build`
 - `npm run smoke:sessions`
 - `npm run smoke:repl`
+
+### 2026-04-09 - Session summary view
+
+Summary:
+
+- added `/sessions summary <current|latest|session-id> [count]` so one saved session can be inspected in detail before resuming it
+- the summary view now shows title, started/last-active timestamps, provider/model/workdir, activity totals, profile, first request, last user message, last assistant reply, and recent events
+- expanded session and REPL parsing smoke coverage so the summary command stays stable for current and previous saved sessions
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:sessions`
+- `npm run smoke:repl`

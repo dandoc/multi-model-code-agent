@@ -10,6 +10,7 @@ import {
   renderSessionComparison,
   renderSessionHistory,
   renderSessionList,
+  renderSessionSummary,
   resolveSessionEntry,
 } from './sessionStore.js';
 
@@ -280,6 +281,41 @@ async function main(): Promise<void> {
         '  profile: idle',
       ],
       'session comparison all'
+    );
+
+    const currentSummary = await renderSessionSummary(store.sessionPath, 4);
+    assertIncludesAll(
+      currentSummary,
+      [
+        `Session summary: ${store.sessionId}`,
+        'Title: Summarize this project.',
+        `Provider/model: ollama / qwen2.5-coder:14b`,
+        `Workdir: ${workdir}`,
+        'Activity: user=1, assistant=1, repl commands=1, config=1, total=4',
+        'Profile: mixed',
+        'First request: Summarize this project.',
+        'Last user message: Summarize this project.',
+        'Last assistant reply: This is a session smoke test reply.',
+        'Recent events (4):',
+      ],
+      'current session summary'
+    );
+
+    const previousSummary = await renderSessionSummary(previousStore.sessionPath, 3);
+    assertIncludesAll(
+      previousSummary,
+      [
+        `Session summary: ${previousStore.sessionId}`,
+        'Title: Show me the earlier session.',
+        `Provider/model: ollama / qwen2.5-coder:7b`,
+        `Workdir: ${previousWorkdir}`,
+        'Activity: user=1, assistant=1, repl commands=0, config=0, total=2',
+        'Profile: light',
+        'First request: Show me the earlier session.',
+        'Last user message: Show me the earlier session.',
+        'Last assistant reply: This is the earlier session reply.',
+      ],
+      'previous session summary'
     );
 
     const recentSessions = await listRecentSessions(10);

@@ -26,6 +26,7 @@ import {
   renderSessionComparison,
   renderSessionHistory,
   renderSessionList,
+  renderSessionSummary,
   resolveSessionEntry,
 } from './sessionStore.js';
 import {
@@ -77,6 +78,8 @@ function printReplHelp(): void {
       '  /resume latest [count] or /resume <session-id> [count]',
       '                       Replace the current conversation with saved user/assistant messages',
       '  /sessions [count]     Show recent saved sessions',
+      '  /sessions summary <current|latest|session-id> [count]',
+      '                       Show a focused summary for one saved session',
       '  /sessions compare [count]',
       '                       Compare recent non-idle sessions by activity profile and event counts',
       '  /sessions compare all [count]',
@@ -388,6 +391,30 @@ async function main(): Promise<void> {
         const request = parseSessionsRequest(entry);
         if (request.kind === 'invalid') {
           console.log(`\n${request.reason}`);
+          continue;
+        }
+
+        if (request.kind === 'summary') {
+          if (request.sessionRef === 'current') {
+            console.log(`\n${await renderSessionSummary(sessionStore.sessionPath, request.count)}`);
+            continue;
+          }
+
+          try {
+            const resolution = await resolveSessionEntry(request.sessionRef, sessionStore.sessionId);
+            if (!resolution.entry) {
+              console.log(
+                `\nCould not find a saved session for "${request.sessionRef}". Use /sessions to inspect recent ids.`
+              );
+              continue;
+            }
+
+            const summary = await renderSessionSummary(resolution.entry.sessionPath, request.count);
+            console.log(`\n${[resolution.warning, summary].filter(Boolean).join('\n')}`);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.log(`\n${message}`);
+          }
           continue;
         }
 
