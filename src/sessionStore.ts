@@ -612,6 +612,15 @@ function formatSessionTimestamp(timestamp: string): string {
   return `${iso.slice(0, 10)} ${iso.slice(11, 19)} UTC`;
 }
 
+function buildRenderedSection(title: string, lines: Array<string | undefined>): string[] {
+  const content = lines.filter((line): line is string => Boolean(line));
+  if (content.length === 0) {
+    return [];
+  }
+
+  return [title, ...content.map((line) => `- ${line}`)];
+}
+
 function matchesSessionSearch(entry: SessionListEntry, query: string): boolean {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) {
@@ -1047,38 +1056,49 @@ export async function renderSessionSummary(sessionPath: string, limit = 5): Prom
 
   const lines = [
     `Session summary: ${startedEvent.sessionId}`,
-    `Path: ${sessionPath}`,
-    `Title: ${title}`,
-    `Started: ${formatSessionTimestamp(startedEvent.timestamp)}`,
-    `Last active: ${formatSessionTimestamp(events.at(-1)?.timestamp ?? startedEvent.timestamp)}`,
-    `Provider/model: ${effectiveConfig.provider} / ${effectiveConfig.model || '(provider default)'}`,
-    `Workdir: ${effectiveConfig.workdir}`,
-    `Reason: ${startedEvent.reason}`,
-    `Activity: user=${summary.userMessages}, assistant=${summary.assistantMessages}, repl commands=${summary.replCommands}, config=${summary.configChanges}, total=${summary.totalEvents}`,
-    `Profile: ${summary.profile}`,
   ];
 
+  lines.push(
+    '',
+    ...buildRenderedSection('Session', [
+      `Path: ${sessionPath}`,
+      `Title: ${title}`,
+      `Started: ${formatSessionTimestamp(startedEvent.timestamp)}`,
+      `Last active: ${formatSessionTimestamp(events.at(-1)?.timestamp ?? startedEvent.timestamp)}`,
+    ]),
+    '',
+    ...buildRenderedSection('Runtime', [
+      `Provider/model: ${effectiveConfig.provider} / ${effectiveConfig.model || '(provider default)'}`,
+      `Workdir: ${effectiveConfig.workdir}`,
+      `Reason: ${startedEvent.reason}`,
+    ]),
+    '',
+    ...buildRenderedSection('Activity', [
+      `Activity: user=${summary.userMessages}, assistant=${summary.assistantMessages}, repl commands=${summary.replCommands}, config=${summary.configChanges}, total=${summary.totalEvents}`,
+      `Profile: ${summary.profile}`,
+    ])
+  );
+
   if (loaded.malformedLineCount > 0) {
-    lines.push(`Warning: ${formatMalformedLineWarning(loaded.malformedLineCount)} while reading this session.`);
+    lines.push(
+      '',
+      ...buildRenderedSection('Warnings', [
+        `Warning: ${formatMalformedLineWarning(loaded.malformedLineCount)} while reading this session.`,
+      ])
+    );
   }
 
-  if (firstUserMessage) {
-    lines.push(`First request: ${truncateInline(firstUserMessage.content)}`);
-  }
+  lines.push(
+    '',
+    ...buildRenderedSection('Conversation', [
+      firstUserMessage ? `First request: ${truncateInline(firstUserMessage.content)}` : undefined,
+      lastUserMessage ? `Last user message: ${truncateInline(lastUserMessage.content)}` : undefined,
+      lastAssistantMessage ? `Last assistant reply: ${truncateInline(lastAssistantMessage.content)}` : undefined,
+      lastMeaningfulCommand ? `Last meaningful command: ${lastMeaningfulCommand.command}` : undefined,
+    ])
+  );
 
-  if (lastUserMessage) {
-    lines.push(`Last user message: ${truncateInline(lastUserMessage.content)}`);
-  }
-
-  if (lastAssistantMessage) {
-    lines.push(`Last assistant reply: ${truncateInline(lastAssistantMessage.content)}`);
-  }
-
-  if (lastMeaningfulCommand) {
-    lines.push(`Last meaningful command: ${lastMeaningfulCommand.command}`);
-  }
-
-  lines.push(`Recent events (${visibleEvents.length}):`);
+  lines.push('', `Recent events (${visibleEvents.length}):`);
 
   if (visibleEvents.length === 0) {
     lines.push('- No user-facing events yet.');
@@ -1306,29 +1326,37 @@ export function renderResumeContext(
       loadedConversation.messages.length === 1 ? '' : 's'
     } from session ${loadedConversation.sessionId}.`,
     `Total saved messages in that session: ${loadedConversation.totalMessages}.`,
-    loadedConversation.title ? `Title: ${loadedConversation.title}` : undefined,
-    loadedConversation.startedAt
-      ? `Started: ${formatSessionTimestamp(loadedConversation.startedAt)}`
-      : undefined,
-    loadedConversation.lastActivityAt
-      ? `Last active: ${formatSessionTimestamp(loadedConversation.lastActivityAt)}`
-      : undefined,
-    sourceSummary,
-    currentSummary,
-    runtimeNote,
-    `Activity: user=${loadedConversation.userMessages}, assistant=${loadedConversation.assistantMessages}, repl commands=${loadedConversation.replCommands}, config=${loadedConversation.configChanges}, profile=${loadedConversation.profile}`,
-    loadedConversation.firstRequest
-      ? `First request: ${truncateInline(loadedConversation.firstRequest)}`
-      : undefined,
-    loadedConversation.lastUserMessage
-      ? `Last user message: ${truncateInline(loadedConversation.lastUserMessage)}`
-      : undefined,
-    loadedConversation.lastAssistantReply
-      ? `Last assistant reply: ${truncateInline(loadedConversation.lastAssistantReply)}`
-      : undefined,
-    loadedConversation.lastMeaningfulCommand
-      ? `Last meaningful command: ${loadedConversation.lastMeaningfulCommand}`
-      : undefined,
+    '',
+    ...buildRenderedSection('Session', [
+      loadedConversation.title ? `Title: ${loadedConversation.title}` : undefined,
+      loadedConversation.startedAt
+        ? `Started: ${formatSessionTimestamp(loadedConversation.startedAt)}`
+        : undefined,
+      loadedConversation.lastActivityAt
+        ? `Last active: ${formatSessionTimestamp(loadedConversation.lastActivityAt)}`
+        : undefined,
+    ]),
+    '',
+    ...buildRenderedSection('Runtime', [sourceSummary, currentSummary, runtimeNote]),
+    '',
+    ...buildRenderedSection('Activity', [
+      `Activity: user=${loadedConversation.userMessages}, assistant=${loadedConversation.assistantMessages}, repl commands=${loadedConversation.replCommands}, config=${loadedConversation.configChanges}, profile=${loadedConversation.profile}`,
+    ]),
+    '',
+    ...buildRenderedSection('Conversation', [
+      loadedConversation.firstRequest
+        ? `First request: ${truncateInline(loadedConversation.firstRequest)}`
+        : undefined,
+      loadedConversation.lastUserMessage
+        ? `Last user message: ${truncateInline(loadedConversation.lastUserMessage)}`
+        : undefined,
+      loadedConversation.lastAssistantReply
+        ? `Last assistant reply: ${truncateInline(loadedConversation.lastAssistantReply)}`
+        : undefined,
+      loadedConversation.lastMeaningfulCommand
+        ? `Last meaningful command: ${loadedConversation.lastMeaningfulCommand}`
+        : undefined,
+    ]),
   ].filter(Boolean);
 
   return lines.join('\n');
@@ -1345,36 +1373,51 @@ export function renderRuntimeStatus(
 
   const lines = [
     'Current status',
-    `Session id: ${loadedConversation.sessionId}`,
-    `Path: ${sessionPath}`,
-    loadedConversation.title ? `Title: ${loadedConversation.title}` : undefined,
-    loadedConversation.startedAt
-      ? `Started: ${formatSessionTimestamp(loadedConversation.startedAt)}`
-      : undefined,
-    loadedConversation.lastActivityAt
-      ? `Last active: ${formatSessionTimestamp(loadedConversation.lastActivityAt)}`
-      : undefined,
-    `Runtime: provider=${currentConfig.provider}, model=${
-      currentConfig.model || '(provider default)'
-    }, baseUrl=${baseUrl}, workdir=${currentConfig.workdir}`,
-    `Flags: autoApprove=${currentConfig.autoApprove}, maxTurns=${currentConfig.maxTurns}, temperature=${currentConfig.temperature}, requestTimeout=${Math.round((currentConfig.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) / 1000)}s`,
-    `Resume source: ${resumeSourceSessionId ?? '(none)'}`,
-    `Saved activity: user=${loadedConversation.userMessages}, assistant=${loadedConversation.assistantMessages}, repl commands=${loadedConversation.replCommands}, config=${loadedConversation.configChanges}, profile=${loadedConversation.profile}`,
-    `Saved conversation messages: ${loadedConversation.totalMessages}`,
-    loadedConversation.firstRequest
-      ? `First request: ${truncateInline(loadedConversation.firstRequest)}`
-      : undefined,
-    loadedConversation.lastUserMessage
-      ? `Last user message: ${truncateInline(loadedConversation.lastUserMessage)}`
-      : undefined,
-    loadedConversation.lastAssistantReply
-      ? `Last assistant reply: ${truncateInline(loadedConversation.lastAssistantReply)}`
-      : undefined,
-    loadedConversation.lastMeaningfulCommand
-      ? `Last meaningful command: ${loadedConversation.lastMeaningfulCommand}`
-      : undefined,
-    loadedConversation.warning,
   ].filter(Boolean);
+
+  lines.push(
+    '',
+    ...buildRenderedSection('Session', [
+      `Session id: ${loadedConversation.sessionId}`,
+      `Path: ${sessionPath}`,
+      loadedConversation.title ? `Title: ${loadedConversation.title}` : undefined,
+      loadedConversation.startedAt
+        ? `Started: ${formatSessionTimestamp(loadedConversation.startedAt)}`
+        : undefined,
+      loadedConversation.lastActivityAt
+        ? `Last active: ${formatSessionTimestamp(loadedConversation.lastActivityAt)}`
+        : undefined,
+      `Resume source: ${resumeSourceSessionId ?? '(none)'}`,
+    ]),
+    '',
+    ...buildRenderedSection('Runtime', [
+      `Runtime: provider=${currentConfig.provider}, model=${
+        currentConfig.model || '(provider default)'
+      }, baseUrl=${baseUrl}, workdir=${currentConfig.workdir}`,
+      `Flags: autoApprove=${currentConfig.autoApprove}, maxTurns=${currentConfig.maxTurns}, temperature=${currentConfig.temperature}, requestTimeout=${Math.round((currentConfig.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) / 1000)}s`,
+    ]),
+    '',
+    ...buildRenderedSection('Saved conversation', [
+      `Saved activity: user=${loadedConversation.userMessages}, assistant=${loadedConversation.assistantMessages}, repl commands=${loadedConversation.replCommands}, config=${loadedConversation.configChanges}, profile=${loadedConversation.profile}`,
+      `Saved conversation messages: ${loadedConversation.totalMessages}`,
+      loadedConversation.firstRequest
+        ? `First request: ${truncateInline(loadedConversation.firstRequest)}`
+        : undefined,
+      loadedConversation.lastUserMessage
+        ? `Last user message: ${truncateInline(loadedConversation.lastUserMessage)}`
+        : undefined,
+      loadedConversation.lastAssistantReply
+        ? `Last assistant reply: ${truncateInline(loadedConversation.lastAssistantReply)}`
+        : undefined,
+      loadedConversation.lastMeaningfulCommand
+        ? `Last meaningful command: ${loadedConversation.lastMeaningfulCommand}`
+        : undefined,
+    ])
+  );
+
+  if (loadedConversation.warning) {
+    lines.push('', ...buildRenderedSection('Warnings', [loadedConversation.warning]));
+  }
 
   return lines.join('\n');
 }

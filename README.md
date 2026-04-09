@@ -421,6 +421,7 @@ Typical patterns:
 - for `replace`, the file path, match count, first match line, and a compact `+/-` diff hunk
 - for `create`, the target path, whether overwrite is on, and a compact added-lines preview
 - `write_patch`, `run_shell`, and `run_files` approvals now use a shorter field-style layout so `cwd`, timeout, shell/path scope, and diff previews are easier to scan quickly
+- session/profile status-style outputs now group information into short sections (`Session`, `Runtime`, `Activity`, `Conversation`) so longer command results are easier to scan
 
 If the user asks to create files inside the current workspace, the agent should use `write_patch` instead of refusing the request.
 

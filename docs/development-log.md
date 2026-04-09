@@ -673,6 +673,7 @@ Summary:
 - `/help` now supports focused topics (`runtime`, `sessions`, `profiles`, `models`, `safety`), `/?` aliases to `/help`, and unknown slash commands now suggest the closest valid command plus a relevant help topic
 - tool result summaries now use a more consistent `SUCCESS` / `FAILED` prefix style for quicker scanning, with run-shell and run-files smoke updated to lock that in
 - approval prompts for `write_patch`, `run_shell`, and `run_files` now use a shorter field-style layout, and `npm run smoke:approvals` locks in those confirm messages
+- session/profile result views (`/status`, `/sessions summary`, `/resume`, `/profiles diff`, profile load preview) now use short sectioned layouts so runtime, activity, and conversation details are easier to scan
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:
@@ -680,5 +681,6 @@ Validation:
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke:profiles`
+- `npm run smoke:sessions`
 - `npm run smoke:repl`
 - `npm run smoke:approvals`

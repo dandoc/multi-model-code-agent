@@ -237,26 +237,32 @@ async function main(): Promise<void> {
         `Unexpected current-session resume warning: ${currentConversation.warning ?? '(missing)'}`
       );
     }
-    assertIncludesAll(
-      renderResumeContext(currentConversation, config),
-      [
-        `Resumed 2 messages from session ${store.sessionId}.`,
-        'Title: Current session custom title',
-        'Activity: user=1, assistant=1, repl commands=1, config=1, profile=mixed',
-        'First request: Summarize this project.',
-        'Last assistant reply: This is a session smoke test reply.',
-      ],
+      assertIncludesAll(
+        renderResumeContext(currentConversation, config),
+        [
+          `Resumed 2 messages from session ${store.sessionId}.`,
+          'Session',
+          'Runtime',
+          'Conversation',
+          'Title: Current session custom title',
+          'Activity: user=1, assistant=1, repl commands=1, config=1, profile=mixed',
+          'First request: Summarize this project.',
+          'Last assistant reply: This is a session smoke test reply.',
+        ],
       'current resume context'
     );
-    assertIncludesAll(
-      renderRuntimeStatus(currentConversation, config, store.sessionPath),
-      [
-        'Current status',
-        `Session id: ${store.sessionId}`,
-        `Path: ${store.sessionPath}`,
-        'Title: Current session custom title',
-        `Runtime: provider=ollama, model=qwen2.5-coder:14b, baseUrl=http://127.0.0.1:11434, workdir=${workdir}`,
-        'requestTimeout=120s',
+      assertIncludesAll(
+        renderRuntimeStatus(currentConversation, config, store.sessionPath),
+        [
+          'Current status',
+          'Session',
+          'Runtime',
+          'Saved conversation',
+          `Session id: ${store.sessionId}`,
+          `Path: ${store.sessionPath}`,
+          'Title: Current session custom title',
+          `Runtime: provider=ollama, model=qwen2.5-coder:14b, baseUrl=http://127.0.0.1:11434, workdir=${workdir}`,
+          'requestTimeout=120s',
         'Resume source: (none)',
         'Saved activity: user=1, assistant=1, repl commands=1, config=1, profile=mixed',
         'Saved conversation messages: 2',
@@ -401,15 +407,19 @@ async function main(): Promise<void> {
     );
 
     const currentSummary = await renderSessionSummary(store.sessionPath, 4);
-    assertIncludesAll(
-      currentSummary,
-      [
-        `Session summary: ${store.sessionId}`,
-        'Title: Current session custom title',
-        `Provider/model: ollama / qwen2.5-coder:14b`,
-        `Workdir: ${workdir}`,
-        'Activity: user=1, assistant=1, repl commands=1, config=1, total=4',
-        'Profile: mixed',
+      assertIncludesAll(
+        currentSummary,
+        [
+          `Session summary: ${store.sessionId}`,
+          'Session',
+          'Runtime',
+          'Activity',
+          'Conversation',
+          'Title: Current session custom title',
+          `Provider/model: ollama / qwen2.5-coder:14b`,
+          `Workdir: ${workdir}`,
+          'Activity: user=1, assistant=1, repl commands=1, config=1, total=4',
+          'Profile: mixed',
         'First request: Summarize this project.',
         'Last user message: Summarize this project.',
         'Last assistant reply: This is a session smoke test reply.',

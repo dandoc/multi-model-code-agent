@@ -164,6 +164,15 @@ function renderBoolean(value: boolean): string {
   return value ? 'true' : 'false';
 }
 
+function buildSection(title: string, lines: Array<string | undefined>): string[] {
+  const content = lines.filter((line): line is string => Boolean(line));
+  if (content.length === 0) {
+    return [];
+  }
+
+  return [title, ...content.map((line) => `- ${line}`)];
+}
+
 function collectProfileDiff(currentConfig: AgentConfig, profile: SavedProfile): ProfileDiffField[] {
   const fields: ProfileDiffField[] = [];
 
@@ -351,16 +360,22 @@ export function renderProfileDiff(currentConfig: AgentConfig, profile: SavedProf
   const lines = [
     `Profile diff: ${profile.name}`,
     `Updated: ${formatTimestamp(profile.updatedAt)}`,
-    `Current runtime: provider=${currentConfig.provider}, model=${currentConfig.model}, workdir=${currentConfig.workdir}`,
-    `Saved profile: provider=${profile.provider}, model=${profile.model}, workdir=${profile.workdir}`,
   ];
 
+  lines.push(
+    '',
+    ...buildSection('Runtime', [
+      `Current runtime: provider=${currentConfig.provider}, model=${currentConfig.model}, workdir=${currentConfig.workdir}`,
+      `Saved profile: provider=${profile.provider}, model=${profile.model}, workdir=${profile.workdir}`,
+    ])
+  );
+
   if (diffFields.length === 0) {
-    lines.push('No changes. This profile already matches the current runtime exactly.');
+    lines.push('', ...buildSection('Changes', ['No changes. This profile already matches the current runtime exactly.']));
     return lines.join('\n');
   }
 
-  lines.push(`Changed fields (${diffFields.length}):`);
+  lines.push('', `Changed fields (${diffFields.length}):`);
   for (const field of diffFields) {
     lines.push(`- ${field.label}: ${field.current} -> ${field.saved}`);
   }
@@ -373,20 +388,26 @@ export function renderProfileLoadPreview(currentConfig: AgentConfig, profile: Sa
   const lines = [
     `Load profile: ${profile.name}`,
     `Updated: ${formatTimestamp(profile.updatedAt)}`,
-    `Current runtime: provider=${currentConfig.provider}, model=${currentConfig.model}, workdir=${currentConfig.workdir}`,
-    `Saved profile: provider=${profile.provider}, model=${profile.model}, workdir=${profile.workdir}`,
   ];
 
+  lines.push(
+    '',
+    ...buildSection('Runtime', [
+      `Current runtime: provider=${currentConfig.provider}, model=${currentConfig.model}, workdir=${currentConfig.workdir}`,
+      `Saved profile: provider=${profile.provider}, model=${profile.model}, workdir=${profile.workdir}`,
+    ])
+  );
+
   if (diffFields.length === 0) {
-    lines.push('This profile already matches the current runtime.');
+    lines.push('', ...buildSection('Changes', ['This profile already matches the current runtime.']));
   } else {
-    lines.push(`Changed fields (${diffFields.length}):`);
+    lines.push('', `Changed fields (${diffFields.length}):`);
     for (const field of diffFields) {
       lines.push(`- ${field.label}: ${field.current} -> ${field.saved}`);
     }
   }
 
-  lines.push('Loading a profile resets the current conversation.');
+  lines.push('', ...buildSection('Effect', ['Loading a profile resets the current conversation.']));
   return lines.join('\n');
 }
 

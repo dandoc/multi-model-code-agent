@@ -121,9 +121,12 @@ async function main(): Promise<void> {
       },
       saved
     );
-    if (!diffSame.includes('No changes. This profile already matches the current runtime exactly.')) {
-      throw new Error('Profile diff should explain when the saved profile already matches the current runtime.');
-    }
+      if (!diffSame.includes('No changes. This profile already matches the current runtime exactly.')) {
+        throw new Error('Profile diff should explain when the saved profile already matches the current runtime.');
+      }
+      if (!diffSame.includes('Runtime') || !diffSame.includes('Changes')) {
+        throw new Error('Profile diff should render runtime and changes sections.');
+      }
     const loadPreviewSame = renderProfileLoadPreview(
       {
         provider: 'ollama',
@@ -136,13 +139,20 @@ async function main(): Promise<void> {
       },
       saved
     );
-    if (
-      !loadPreviewSame.includes('Load profile: local-qwen') ||
-      !loadPreviewSame.includes('This profile already matches the current runtime.') ||
-      !loadPreviewSame.includes('Loading a profile resets the current conversation.')
-    ) {
-      throw new Error('Profile load preview should explain the no-op case and conversation reset.');
-    }
+      if (
+        !loadPreviewSame.includes('Load profile: local-qwen') ||
+        !loadPreviewSame.includes('This profile already matches the current runtime.') ||
+        !loadPreviewSame.includes('Loading a profile resets the current conversation.')
+      ) {
+        throw new Error('Profile load preview should explain the no-op case and conversation reset.');
+      }
+      if (
+        !loadPreviewSame.includes('Runtime') ||
+        !loadPreviewSame.includes('Changes') ||
+        !loadPreviewSame.includes('Effect')
+      ) {
+        throw new Error('Profile load preview should render runtime, changes, and effect sections.');
+      }
     const diffChanged = renderProfileDiff(
       {
         provider: 'codex',
