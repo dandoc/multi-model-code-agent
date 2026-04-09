@@ -8,6 +8,7 @@ import {
   loadSessionConversation,
   listRecentSessions,
   renderResumeContext,
+  renderRuntimeStatus,
   renderSessionComparison,
   renderSessionHistory,
   renderSessionList,
@@ -204,6 +205,20 @@ async function main(): Promise<void> {
         'Last assistant reply: This is a session smoke test reply.',
       ],
       'current resume context'
+    );
+    assertIncludesAll(
+      renderRuntimeStatus(currentConversation, config, store.sessionPath),
+      [
+        'Current status',
+        `Session id: ${store.sessionId}`,
+        `Path: ${store.sessionPath}`,
+        'Title: Summarize this project.',
+        `Runtime: provider=ollama, model=qwen2.5-coder:14b, baseUrl=http://127.0.0.1:11434, workdir=${workdir}`,
+        'Resume source: (none)',
+        'Saved activity: user=1, assistant=1, repl commands=1, config=1, profile=mixed',
+        'Saved conversation messages: 2',
+      ],
+      'current runtime status'
     );
 
     await writeFile(
@@ -431,6 +446,23 @@ async function main(): Promise<void> {
         'Last assistant reply: This is the earlier session reply.',
       ],
       'previous resume context'
+    );
+    assertIncludesAll(
+      renderRuntimeStatus(
+        resumedConversation,
+        config,
+        previousStore.sessionPath,
+        previousStore.sessionId
+      ),
+      [
+        'Current status',
+        `Session id: ${previousStore.sessionId}`,
+        `Path: ${previousStore.sessionPath}`,
+        'Title: Show me the earlier session.',
+        `Resume source: ${previousStore.sessionId}`,
+        'Saved activity: user=1, assistant=1, repl commands=0, config=0, profile=light',
+      ],
+      'resumed runtime status'
     );
 
     const bulkRoot = path.join(tempRoot, 'bulk-home');

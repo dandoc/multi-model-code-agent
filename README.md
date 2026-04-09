@@ -106,6 +106,7 @@ npm run dev
 
 - `/help`
 - `/config`
+- `/status`
 - `/history [count]`
 - `/history latest [count]`
 - `/history <session-id> [count]`
@@ -177,6 +178,7 @@ Each REPL session now writes a small JSONL log so you can inspect recent activit
 - use `/resume <session-id>` to continue from a specific saved session by full or unique prefix id
 - `/resume` only restores saved user/assistant messages; your current provider, model, and workdir stay as they are
 - `/resume` now prints a short context recap with the saved session title, last active time, activity profile, and the last visible user/assistant messages
+- use `/status` to see the current runtime config together with the current saved session id, resume source, activity profile, and latest visible messages
 - corrupted or schema-invalid session logs are skipped during browsing with a visible warning
 - exact full session ids are resolved directly, even when they are older than the recent-session scan window
 

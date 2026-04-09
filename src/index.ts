@@ -24,6 +24,7 @@ import {
   createSessionStore,
   loadSessionConversation,
   renderResumeContext,
+  renderRuntimeStatus,
   renderSessionComparison,
   renderSessionHistory,
   renderSessionList,
@@ -74,6 +75,7 @@ function printReplHelp(): void {
       'REPL commands:',
       '  /help                 Show this help',
       '  /config               Show current config',
+      '  /status               Show current runtime + saved-session status',
       '  /history [count]      Show recent events from the current saved session',
       '  /history latest [count] or /history <session-id> [count]',
       '                       Show events from an earlier saved session',
@@ -181,6 +183,7 @@ async function main(): Promise<void> {
   let config = parsed.config;
   let adapter = createModelAdapter(config);
   let sessionStore = await createSessionStore(config, launchCwd, parsed.prompt ? 'one-shot' : 'startup');
+  let lastResumedSessionId: string | undefined;
 
   const ui = {
     confirm: async (message: string): Promise<boolean> => {
@@ -224,6 +227,7 @@ async function main(): Promise<void> {
     agent.updateAdapter(adapter);
     if (resetConversation) {
       agent.reset();
+      lastResumedSessionId = undefined;
     }
   };
 
@@ -296,6 +300,24 @@ async function main(): Promise<void> {
         continue;
       }
 
+      if (entry === '/status') {
+        try {
+          const currentConversation = await loadSessionConversation(sessionStore.sessionPath, 10);
+          console.log(
+            `\n${renderRuntimeStatus(
+              currentConversation,
+              config,
+              sessionStore.sessionPath,
+              lastResumedSessionId
+            )}`
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.log(`\n${message}`);
+        }
+        continue;
+      }
+
       if (entry === '/history' || entry.startsWith('/history ')) {
         const request = parseHistoryRequest(entry);
         if (shouldLogHistoryViewCommand(request)) {
@@ -361,6 +383,7 @@ async function main(): Promise<void> {
           }
 
           agent.replaceHistory(loadedConversation.messages);
+          lastResumedSessionId = loadedConversation.sessionId;
 
           const resumeMessage = renderResumeContext(
             {
@@ -457,6 +480,7 @@ async function main(): Promise<void> {
       if (entry === '/reset') {
         await logSessionEvent(() => sessionStore.logCommand(entry));
         agent.reset();
+        lastResumedSessionId = undefined;
         console.log('\nConversation reset.');
         continue;
       }

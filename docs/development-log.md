@@ -566,3 +566,17 @@ Validation:
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke:sessions`
+
+### 2026-04-09 - Runtime status view
+
+Summary:
+
+- added `/status` so the REPL can show the current runtime config together with the current saved-session id, timestamps, activity profile, and recent visible messages
+- the status view also shows the last resumed session id, which makes it easier to tell whether the current conversation was continued from older saved context
+- kept `/status` view-only so checking status does not pollute the current saved session log
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:sessions`

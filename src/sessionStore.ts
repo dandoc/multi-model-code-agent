@@ -1104,3 +1104,48 @@ export function renderResumeContext(
 
   return lines.join('\n');
 }
+
+export function renderRuntimeStatus(
+  loadedConversation: SessionConversationLoad,
+  currentConfig: AgentConfig,
+  sessionPath: string,
+  resumeSourceSessionId?: string
+): string {
+  const baseUrl =
+    currentConfig.provider === 'codex' ? '(managed by codex CLI)' : currentConfig.baseUrl;
+
+  const lines = [
+    'Current status',
+    `Session id: ${loadedConversation.sessionId}`,
+    `Path: ${sessionPath}`,
+    loadedConversation.title ? `Title: ${loadedConversation.title}` : undefined,
+    loadedConversation.startedAt
+      ? `Started: ${formatSessionTimestamp(loadedConversation.startedAt)}`
+      : undefined,
+    loadedConversation.lastActivityAt
+      ? `Last active: ${formatSessionTimestamp(loadedConversation.lastActivityAt)}`
+      : undefined,
+    `Runtime: provider=${currentConfig.provider}, model=${
+      currentConfig.model || '(provider default)'
+    }, baseUrl=${baseUrl}, workdir=${currentConfig.workdir}`,
+    `Flags: autoApprove=${currentConfig.autoApprove}, maxTurns=${currentConfig.maxTurns}, temperature=${currentConfig.temperature}`,
+    `Resume source: ${resumeSourceSessionId ?? '(none)'}`,
+    `Saved activity: user=${loadedConversation.userMessages}, assistant=${loadedConversation.assistantMessages}, repl commands=${loadedConversation.replCommands}, config=${loadedConversation.configChanges}, profile=${loadedConversation.profile}`,
+    `Saved conversation messages: ${loadedConversation.totalMessages}`,
+    loadedConversation.firstRequest
+      ? `First request: ${truncateInline(loadedConversation.firstRequest)}`
+      : undefined,
+    loadedConversation.lastUserMessage
+      ? `Last user message: ${truncateInline(loadedConversation.lastUserMessage)}`
+      : undefined,
+    loadedConversation.lastAssistantReply
+      ? `Last assistant reply: ${truncateInline(loadedConversation.lastAssistantReply)}`
+      : undefined,
+    loadedConversation.lastMeaningfulCommand
+      ? `Last meaningful command: ${loadedConversation.lastMeaningfulCommand}`
+      : undefined,
+    loadedConversation.warning,
+  ].filter(Boolean);
+
+  return lines.join('\n');
+}
