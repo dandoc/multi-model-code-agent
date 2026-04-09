@@ -4,6 +4,7 @@ import { stdin as input, stdout as output } from 'node:process';
 
 import { AgentRunner } from './agent.js';
 import {
+  DEFAULT_MAX_TURNS,
   createConfigFromInputs,
   providerDefaultBaseUrl,
   providerDefaultModel,
@@ -49,10 +50,12 @@ import {
 import {
   normalizeReplCommandAlias,
   parseHistoryRequest,
+  parseMaxTurnsRequest,
   parseModelsRequest,
   parseProfilesRequest,
   parseResumeRequest,
   parseSessionsRequest,
+  parseTemperatureRequest,
   shouldLogHistoryViewCommand,
   shouldLogSessionsViewCommand,
 } from './replCommands.js';
@@ -145,6 +148,8 @@ function printReplHelp(): void {
       '  /base-url <url>       Switch base URL and save it to .env',
       '  /api-key <value>      Set API key for this session',
       '  /workdir <path>       Change workdir',
+      '  /temperature <value>  Set temperature for this session (0-1.5 or default)',
+      `  /max-turns <value>    Set max turns for this session (1-100 or default=${DEFAULT_MAX_TURNS})`,
       '  /approve on|off       Toggle auto approval',
       '  /quit                 Exit',
       '',
@@ -1013,6 +1018,52 @@ async function main(): Promise<void> {
           const message = error instanceof Error ? error.message : String(error);
           console.log(`\n${message}`);
         }
+        continue;
+      }
+
+      if (entry === '/temperature' || entry.startsWith('/temperature ')) {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
+        const request = parseTemperatureRequest(entry);
+        if (request.kind === 'invalid') {
+          console.log(`\n${request.reason}`);
+          continue;
+        }
+
+        rebuildRuntime(
+          updateConfig(config, {
+            temperature: request.value,
+          }),
+          false
+        );
+        await logSessionEvent(() => sessionStore.logConfig('temperature update', config));
+        console.log(
+          request.usedDefault
+            ? `\nTemperature reset to ${config.temperature} for this session.`
+            : `\nTemperature is now ${config.temperature} for this session.`
+        );
+        continue;
+      }
+
+      if (entry === '/max-turns' || entry.startsWith('/max-turns ')) {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
+        const request = parseMaxTurnsRequest(entry);
+        if (request.kind === 'invalid') {
+          console.log(`\n${request.reason}`);
+          continue;
+        }
+
+        rebuildRuntime(
+          updateConfig(config, {
+            maxTurns: request.value,
+          }),
+          false
+        );
+        await logSessionEvent(() => sessionStore.logConfig('max-turns update', config));
+        console.log(
+          request.usedDefault
+            ? `\nMax turns reset to ${config.maxTurns} for this session.`
+            : `\nMax turns is now ${config.maxTurns} for this session.`
+        );
         continue;
       }
 

@@ -144,6 +144,8 @@ npm run dev
 - `/base-url <url>` persists to `.env`
 - `/api-key <value>`
 - `/workdir <path>`
+- `/temperature <value|default>`
+- `/max-turns <value|default>`
 - `/approve on|off`
 - `/quit`
 
@@ -305,6 +307,12 @@ Doctor behavior:
 - `ollama` doctor checks the local `ollama list` command, base URL shape, and whether the expected model is installed
 - `openai` doctor checks base URL shape, whether an API key is configured, and whether `/models` is reachable
 - `codex` doctor checks Codex CLI availability and ChatGPT login status
+
+Session tuning:
+
+- `/temperature <value|default>` updates the current session sampling temperature without rewriting `.env`
+- `/max-turns <value|default>` updates the current session turn budget without restarting the REPL
+- these settings are included if you later save the current runtime as a profile
 
 ## Safety defaults
 

@@ -1,12 +1,14 @@
 import {
   isWholeNumberText,
-  parseModelsRequest,
   normalizeReplCommandAlias,
-  parseProfilesRequest,
   parseHistoryRequest,
+  parseMaxTurnsRequest,
+  parseModelsRequest,
   parsePositiveCount,
+  parseProfilesRequest,
   parseResumeRequest,
   parseSessionsRequest,
+  parseTemperatureRequest,
   shouldLogHistoryViewCommand,
   shouldLogSessionsViewCommand,
 } from './replCommands.js';
@@ -318,6 +320,62 @@ async function main(): Promise<void> {
   assert(
     modelsDoctorInvalid.kind === 'invalid',
     'Expected malformed /models doctor syntax to be rejected.'
+  );
+
+  const temperatureUpdate = parseTemperatureRequest('/temperature 0.7');
+  assert(
+    temperatureUpdate.kind === 'update' &&
+      temperatureUpdate.value === 0.7 &&
+      temperatureUpdate.usedDefault === false,
+    'Expected /temperature <value> to parse correctly.'
+  );
+
+  const temperatureDefault = parseTemperatureRequest('/temperature default');
+  assert(
+    temperatureDefault.kind === 'update' &&
+      temperatureDefault.value === 0.2 &&
+      temperatureDefault.usedDefault === true,
+    'Expected /temperature default to reset to the default temperature.'
+  );
+
+  const temperatureInvalid = parseTemperatureRequest('/temperature 2.4');
+  assert(
+    temperatureInvalid.kind === 'invalid',
+    'Expected out-of-range /temperature input to be rejected.'
+  );
+
+  const temperatureMissing = parseTemperatureRequest('/temperature');
+  assert(
+    temperatureMissing.kind === 'invalid',
+    'Expected bare /temperature to be rejected.'
+  );
+
+  const maxTurnsUpdate = parseMaxTurnsRequest('/max-turns 24');
+  assert(
+    maxTurnsUpdate.kind === 'update' &&
+      maxTurnsUpdate.value === 24 &&
+      maxTurnsUpdate.usedDefault === false,
+    'Expected /max-turns <value> to parse correctly.'
+  );
+
+  const maxTurnsDefault = parseMaxTurnsRequest('/max-turns default');
+  assert(
+    maxTurnsDefault.kind === 'update' &&
+      maxTurnsDefault.value === 8 &&
+      maxTurnsDefault.usedDefault === true,
+    'Expected /max-turns default to reset to the default turn budget.'
+  );
+
+  const maxTurnsInvalid = parseMaxTurnsRequest('/max-turns 0');
+  assert(
+    maxTurnsInvalid.kind === 'invalid',
+    'Expected invalid /max-turns input to be rejected.'
+  );
+
+  const maxTurnsMissing = parseMaxTurnsRequest('/max-turns');
+  assert(
+    maxTurnsMissing.kind === 'invalid',
+    'Expected bare /max-turns to be rejected.'
   );
 
   console.log('[repl-smoke] All REPL command parsing checks passed.');

@@ -9,6 +9,10 @@ import {
 } from './providerModels.js';
 import type { AgentConfig, ModelProvider, ParsedCliInput } from './types.js';
 
+export const DEFAULT_MAX_TURNS = 8;
+export const DEFAULT_TEMPERATURE = 0.2;
+export const MAX_TEMPERATURE = 1.5;
+
 type ArgValue = string | boolean;
 
 function normalizeProvider(input: string | undefined): ModelProvider {
@@ -149,13 +153,13 @@ export function createConfigFromInputs(argv: string[]): ParsedCliInput {
     ),
     maxTurns: Math.max(
       1,
-      Math.floor(parseNumber(parsed.flags['max-turns'] ?? process.env.AGENT_MAX_TURNS, 8))
+      Math.floor(parseNumber(parsed.flags['max-turns'] ?? process.env.AGENT_MAX_TURNS, DEFAULT_MAX_TURNS))
     ),
     temperature: Math.max(
       0,
       Math.min(
-        1.5,
-        parseNumber(parsed.flags.temperature ?? process.env.AGENT_TEMPERATURE, 0.2)
+        MAX_TEMPERATURE,
+        parseNumber(parsed.flags.temperature ?? process.env.AGENT_TEMPERATURE, DEFAULT_TEMPERATURE)
       )
     ),
   };

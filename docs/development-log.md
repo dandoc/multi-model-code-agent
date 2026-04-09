@@ -655,6 +655,7 @@ Summary:
 - `/profiles load <name>` now shows a runtime diff preview and asks for confirmation before resetting the conversation
 - `/models ... search <query>` now filters provider model lists and shows short family hints for common model families
 - `/models ... doctor` now diagnoses provider readiness and common setup failures for Ollama, OpenAI-compatible endpoints, and Codex CLI
+- `/temperature` and `/max-turns` now tune the current session runtime without restarting or persisting to `.env`
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:

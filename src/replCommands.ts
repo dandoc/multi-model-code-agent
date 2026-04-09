@@ -1,4 +1,5 @@
 import type { ModelProvider } from './types.js';
+import { DEFAULT_MAX_TURNS, DEFAULT_TEMPERATURE, MAX_TEMPERATURE } from './config.js';
 
 export function isWholeNumberText(value: string | undefined): boolean {
   return typeof value === 'string' && /^\d+$/.test(value.trim());
@@ -162,6 +163,17 @@ export type ModelsRequest =
   | {
       kind: 'doctor';
       scope: 'current' | 'all' | ModelProvider;
+    }
+  | {
+      kind: 'invalid';
+    reason: string;
+  };
+
+export type RuntimeSettingRequest =
+  | {
+      kind: 'update';
+      value: number;
+      usedDefault: boolean;
     }
   | {
       kind: 'invalid';
@@ -531,4 +543,75 @@ export function normalizeReplCommandAlias(entry: string): string {
   }
 
   return entry;
+}
+
+export function parseTemperatureRequest(entry: string): RuntimeSettingRequest {
+  const rawValue = entry.slice('/temperature'.length).trim();
+  if (!rawValue) {
+    return {
+      kind: 'invalid',
+      reason: `Use /temperature <0-${MAX_TEMPERATURE}|default>.`,
+    };
+  }
+
+  if (rawValue.toLowerCase() === 'default') {
+    return {
+      kind: 'update',
+      value: DEFAULT_TEMPERATURE,
+      usedDefault: true,
+    };
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > MAX_TEMPERATURE) {
+    return {
+      kind: 'invalid',
+      reason: `Use /temperature <0-${MAX_TEMPERATURE}|default>.`,
+    };
+  }
+
+  return {
+    kind: 'update',
+    value: parsed,
+    usedDefault: false,
+  };
+}
+
+export function parseMaxTurnsRequest(entry: string): RuntimeSettingRequest {
+  const rawValue = entry.slice('/max-turns'.length).trim();
+  if (!rawValue) {
+    return {
+      kind: 'invalid',
+      reason: 'Use /max-turns <1-100|default>.',
+    };
+  }
+
+  if (rawValue.toLowerCase() === 'default') {
+    return {
+      kind: 'update',
+      value: DEFAULT_MAX_TURNS,
+      usedDefault: true,
+    };
+  }
+
+  if (!isWholeNumberText(rawValue)) {
+    return {
+      kind: 'invalid',
+      reason: 'Use /max-turns <1-100|default>.',
+    };
+  }
+
+  const parsed = Number.parseInt(rawValue, 10);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 100) {
+    return {
+      kind: 'invalid',
+      reason: 'Use /max-turns <1-100|default>.',
+    };
+  }
+
+  return {
+    kind: 'update',
+    value: parsed,
+    usedDefault: false,
+  };
 }
