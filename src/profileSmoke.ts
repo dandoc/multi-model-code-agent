@@ -3,7 +3,15 @@ import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { deleteProfile, listProfiles, loadProfile, renderProfileList, saveProfile } from './profileStore.js';
+import {
+  deleteProfile,
+  findMatchingProfiles,
+  listProfiles,
+  loadProfile,
+  renderMatchingProfilesLine,
+  renderProfileList,
+  saveProfile,
+} from './profileStore.js';
 import { getAgentHomeDir } from './storagePaths.js';
 
 async function main(): Promise<void> {
@@ -68,6 +76,42 @@ async function main(): Promise<void> {
     }
     if (!rendered.includes('provider=codex, model=gpt-5.4')) {
       throw new Error('Rendered profile list is missing the codex profile summary.');
+    }
+    const matches = await findMatchingProfiles({
+      provider: 'ollama',
+      model: 'qwen3-coder:30b',
+      baseUrl: 'http://127.0.0.1:11434',
+      workdir: workdirA,
+      autoApprove: false,
+      maxTurns: 8,
+      temperature: 0.2,
+    });
+    if (matches.length !== 1 || matches[0]?.name !== 'local-qwen') {
+      throw new Error('Expected current runtime profile matching to find local-qwen.');
+    }
+    const matchLine = await renderMatchingProfilesLine({
+      provider: 'ollama',
+      model: 'qwen3-coder:30b',
+      baseUrl: 'http://127.0.0.1:11434',
+      workdir: workdirA,
+      autoApprove: false,
+      maxTurns: 8,
+      temperature: 0.2,
+    });
+    if (matchLine !== 'Matching profiles: local-qwen') {
+      throw new Error(`Unexpected matching profile line: ${matchLine}`);
+    }
+    const noMatchLine = await renderMatchingProfilesLine({
+      provider: 'ollama',
+      model: 'qwen2.5-coder:7b',
+      baseUrl: 'http://127.0.0.1:11434',
+      workdir: workdirB,
+      autoApprove: false,
+      maxTurns: 8,
+      temperature: 0.2,
+    });
+    if (noMatchLine !== 'Matching profiles: (none)') {
+      throw new Error(`Unexpected empty matching profile line: ${noMatchLine}`);
     }
 
     const previousUserProfile = process.env.USERPROFILE;

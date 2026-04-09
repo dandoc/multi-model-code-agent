@@ -205,6 +205,7 @@ Each REPL session now writes a small JSONL log so you can inspect recent activit
 - use `/profiles` to list saved profiles and see which one matches the current runtime
 - use `/profiles load <name>` to restore a saved profile into the current runtime and reset the conversation
 - use `/profiles delete <name>` to remove a saved profile after confirmation
+- `/status` now also shows which saved profiles match the current runtime exactly
 - profiles do not store API keys; use `/api-key` separately if needed
 - `/profile` is a short alias for `/profiles`
 

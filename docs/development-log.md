@@ -649,6 +649,7 @@ Summary:
 - added `/profiles save|load|delete` and `/profiles` so frequently used provider/model/workdir combinations can be reused quickly
 - profile storage now uses the same agent-home resolution as sessions and serializes read-modify-write updates with a lock + atomic rename
 - profile loads reuse existing workdir validation and reset the conversation into a fresh session with the loaded runtime
+- `/status` now shows which saved profiles match the current runtime
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:

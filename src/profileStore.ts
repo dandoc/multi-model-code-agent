@@ -75,6 +75,25 @@ function matchesCurrentProfile(profile: SavedProfile, config: AgentConfig): bool
   );
 }
 
+export async function findMatchingProfiles(config: AgentConfig): Promise<SavedProfile[]> {
+  const profiles = await listProfiles();
+  return profiles.filter((profile) => matchesCurrentProfile(profile, config));
+}
+
+export async function renderMatchingProfilesLine(config: AgentConfig): Promise<string> {
+  try {
+    const matchingProfiles = await findMatchingProfiles(config);
+    if (matchingProfiles.length === 0) {
+      return 'Matching profiles: (none)';
+    }
+
+    return `Matching profiles: ${matchingProfiles.map((profile) => profile.name).join(', ')}`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return `Matching profiles: unavailable (${message})`;
+  }
+}
+
 function formatTimestamp(timestamp: string): string {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) {

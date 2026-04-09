@@ -13,7 +13,13 @@ import {
 } from './config.js';
 import { loadDotEnv, updateDotEnv } from './env.js';
 import { createModelAdapter } from './modelAdapters.js';
-import { deleteProfile, loadProfile, renderProfileList, saveProfile } from './profileStore.js';
+import {
+  deleteProfile,
+  loadProfile,
+  renderMatchingProfilesLine,
+  renderProfileList,
+  saveProfile,
+} from './profileStore.js';
 import {
   isModelCompatible,
   providerBaseUrlEnvKey,
@@ -330,13 +336,17 @@ async function main(): Promise<void> {
       if (entry === '/status') {
         try {
           const currentConversation = await loadSessionConversation(sessionStore.sessionPath, 10);
+          const profileLine = await renderMatchingProfilesLine(config);
           console.log(
-            `\n${renderRuntimeStatus(
-              currentConversation,
-              config,
-              sessionStore.sessionPath,
-              lastResumedSessionId
-            )}`
+            `\n${[
+              renderRuntimeStatus(
+                currentConversation,
+                config,
+                sessionStore.sessionPath,
+                lastResumedSessionId
+              ),
+              profileLine,
+            ].join('\n')}`
           );
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
