@@ -90,6 +90,18 @@ export type SessionsRequest =
       query: string;
     }
   | {
+      kind: 'delete';
+      sessionRef: string;
+    }
+  | {
+      kind: 'clear-idle';
+      count?: number;
+    }
+  | {
+      kind: 'prune';
+      keepCount: number;
+    }
+  | {
       kind: 'invalid';
       reason: string;
     };
@@ -215,6 +227,54 @@ export function parseSessionsRequest(entry: string): SessionsRequest {
     };
   }
 
+  if (mode === 'delete' || mode === 'remove') {
+    if (args.length === 2) {
+      return {
+        kind: 'delete',
+        sessionRef: args[1],
+      };
+    }
+
+    return {
+      kind: 'invalid',
+      reason: 'Use /sessions delete <session-id>.',
+    };
+  }
+
+  if (mode === 'clear-idle') {
+    if (args.length === 1) {
+      return {
+        kind: 'clear-idle',
+      };
+    }
+
+    if (args.length === 2 && isWholeNumberText(args[1])) {
+      return {
+        kind: 'clear-idle',
+        count: parsePositiveCount(args[1], 0, 200),
+      };
+    }
+
+    return {
+      kind: 'invalid',
+      reason: 'Use /sessions clear-idle [count].',
+    };
+  }
+
+  if (mode === 'prune') {
+    if (args.length === 2 && isWholeNumberText(args[1])) {
+      return {
+        kind: 'prune',
+        keepCount: parsePositiveCount(args[1], 20, 500),
+      };
+    }
+
+    return {
+      kind: 'invalid',
+      reason: 'Use /sessions prune <keep-count>.',
+    };
+  }
+
   if (args.length === 1 && isWholeNumberText(args[0])) {
     return {
       kind: 'list',
@@ -225,7 +285,7 @@ export function parseSessionsRequest(entry: string): SessionsRequest {
   return {
     kind: 'invalid',
     reason:
-      'Use /sessions [count], /sessions summary <current|latest|session-id> [count], /sessions compare [count], /sessions compare all [count], or /sessions search <query> [count]. For a specific session use /history <session-id> or /resume <session-id>.',
+      'Use /sessions [count], /sessions summary <current|latest|session-id> [count], /sessions compare [count], /sessions compare all [count], /sessions search <query> [count], /sessions delete <session-id>, /sessions clear-idle [count], or /sessions prune <keep-count>. For a specific session use /history <session-id> or /resume <session-id>.',
   };
 }
 

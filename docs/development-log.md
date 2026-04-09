@@ -594,3 +594,19 @@ Validation:
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke:sessions`
+
+### 2026-04-09 - Session management commands
+
+Summary:
+
+- added `/sessions delete <session-id>` for one-off cleanup, with current-session protection and confirmation
+- added `/sessions clear-idle [count]` so old startup-only sessions can be removed quickly without touching active work sessions
+- added `/sessions prune <keep-count>` to keep the latest saved sessions and remove older ones after a confirmation preview
+- expanded REPL parsing and session smoke coverage so delete, idle cleanup, and prune flows stay stable
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:sessions`
+- `npm run smoke:repl`

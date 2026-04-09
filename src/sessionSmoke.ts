@@ -5,8 +5,12 @@ import path from 'node:path';
 
 import {
   createSessionStore,
+  deleteSessionEntries,
   loadSessionConversation,
   listRecentSessions,
+  planIdleSessionCleanup,
+  planSessionDelete,
+  planSessionPrune,
   renderResumeContext,
   renderRuntimeStatus,
   renderSessionComparison,
@@ -72,6 +76,25 @@ async function writeSessionFixture(
   };
 
   await writeFile(sessionPath, `${JSON.stringify(startedEvent)}\n`, 'utf8');
+}
+
+async function appendSessionMessageFixture(
+  sessionsDir: string,
+  sessionId: string,
+  role: 'user' | 'assistant',
+  content: string
+): Promise<void> {
+  const sessionPath = path.join(sessionsDir, `${sessionId}.jsonl`);
+  await appendFile(
+    sessionPath,
+    `${JSON.stringify({
+      type: 'message',
+      timestamp: '2026-04-08T00:00:01.000Z',
+      role,
+      content,
+    })}\n`,
+    'utf8'
+  );
 }
 
 async function main(): Promise<void> {
@@ -540,6 +563,102 @@ async function main(): Promise<void> {
       [`Session ${oldestSessionId}`, `Workdir: ${path.join(bulkRoot, 'workspace-0')}`],
       'oldest session history'
     );
+
+    process.env.MM_AGENT_HOME = tempRoot;
+
+    const managementRoot = path.join(tempRoot, 'management-home');
+    const managementSessionsDir = path.join(managementRoot, 'sessions');
+    process.env.MM_AGENT_HOME = managementRoot;
+    await mkdir(managementSessionsDir, { recursive: true });
+
+    const managementCurrentStore = await createSessionStore(
+      {
+        ...config,
+        workdir: path.join(tempRoot, 'workspace-management-current'),
+      },
+      workdir,
+      'management current'
+    );
+    const activeFixtureId = '2026-01-03T00-00-00-000Z-active-fixture';
+    const idleOldFixtureId = '2026-01-01T00-00-00-000Z-idle-old';
+    const idleNewFixtureId = '2026-01-02T00-00-00-000Z-idle-new';
+
+    await writeSessionFixture(
+      managementSessionsDir,
+      activeFixtureId,
+      path.join(managementRoot, 'workspace-active'),
+      'qwen2.5-coder:7b',
+      'management fixture'
+    );
+    await appendSessionMessageFixture(
+      managementSessionsDir,
+      activeFixtureId,
+      'user',
+      'Active fixture request.'
+    );
+    await appendSessionMessageFixture(
+      managementSessionsDir,
+      activeFixtureId,
+      'assistant',
+      'Active fixture reply.'
+    );
+    await writeSessionFixture(
+      managementSessionsDir,
+      idleOldFixtureId,
+      path.join(managementRoot, 'workspace-idle-old'),
+      'qwen2.5-coder:3b',
+      'startup'
+    );
+    await writeSessionFixture(
+      managementSessionsDir,
+      idleNewFixtureId,
+      path.join(managementRoot, 'workspace-idle-new'),
+      'qwen2.5-coder:3b',
+      'startup'
+    );
+
+    const deleteCurrentPlan = await planSessionDelete(
+      managementCurrentStore.sessionId,
+      managementCurrentStore.sessionId
+    );
+    if (!deleteCurrentPlan.entry || deleteCurrentPlan.isCurrent !== true) {
+      throw new Error('Current-session delete planning should mark the target as current.');
+    }
+
+    const deleteActivePlan = await planSessionDelete(
+      activeFixtureId,
+      managementCurrentStore.sessionId
+    );
+    if (!deleteActivePlan.entry || deleteActivePlan.entry.sessionId !== activeFixtureId) {
+      throw new Error('Session delete planning did not resolve the active fixture.');
+    }
+    await deleteSessionEntries([deleteActivePlan.entry]);
+
+    const idleCleanupPlan = await planIdleSessionCleanup(managementCurrentStore.sessionId, 1);
+    if (
+      idleCleanupPlan.entries.length !== 1 ||
+      idleCleanupPlan.entries[0]?.sessionId !== idleOldFixtureId
+    ) {
+      throw new Error('Idle cleanup planning should pick the oldest idle fixture first.');
+    }
+    await deleteSessionEntries(idleCleanupPlan.entries);
+
+    const prunePlan = await planSessionPrune(1, managementCurrentStore.sessionId);
+    if (
+      prunePlan.entries.length !== 1 ||
+      prunePlan.entries[0]?.sessionId !== idleNewFixtureId
+    ) {
+      throw new Error('Session prune planning should delete the remaining older fixture.');
+    }
+    await deleteSessionEntries(prunePlan.entries);
+
+    const remainingManagedSessions = await listRecentSessions(10);
+    if (
+      remainingManagedSessions.length !== 1 ||
+      remainingManagedSessions[0]?.sessionId !== managementCurrentStore.sessionId
+    ) {
+      throw new Error('Session management cleanup should leave only the current management session.');
+    }
 
     process.env.MM_AGENT_HOME = tempRoot;
 

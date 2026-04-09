@@ -22,7 +22,11 @@ import {
 } from './providerModels.js';
 import {
   createSessionStore,
+  deleteSessionEntries,
   loadSessionConversation,
+  planIdleSessionCleanup,
+  planSessionDelete,
+  planSessionPrune,
   renderResumeContext,
   renderRuntimeStatus,
   renderSessionComparison,
@@ -91,6 +95,12 @@ function printReplHelp(): void {
       '                       Include idle sessions in the comparison view',
       '  /sessions search <query> [count]',
       '                       Search saved sessions by title, model, provider, workdir, or reason',
+      '  /sessions delete <session-id>',
+      '                       Delete one saved session by full or unique-prefix id',
+      '  /sessions clear-idle [count]',
+      '                       Delete idle saved sessions, oldest first',
+      '  /sessions prune <keep-count>',
+      '                       Keep the latest saved sessions and delete older ones',
       '  /session [count]      Alias for /sessions',
       '  /tools                Show tool catalog',
       '  /reset                Clear conversation history',
@@ -145,6 +155,10 @@ function answerRuntimeConfigQuestion(inputValue: string, config: AgentConfig): s
   }
 
   return renderConfigSummary(config);
+}
+
+function formatSessionEntryLabel(sessionId: string, title: string, lastActivityAt: string): string {
+  return `- ${sessionId} | ${title} | last active ${lastActivityAt}`;
 }
 
 function ensureProviderReady(config: AgentConfig): void {
@@ -460,6 +474,142 @@ async function main(): Promise<void> {
               request.includeIdle
             )}`
           );
+          continue;
+        }
+
+        if (request.kind === 'delete') {
+          try {
+            const plan = await planSessionDelete(request.sessionRef, sessionStore.sessionId);
+            if (!plan.entry) {
+              console.log(
+                `\nCould not find a saved session for "${request.sessionRef}". Use /sessions to inspect recent ids.`
+              );
+              continue;
+            }
+
+            if (plan.isCurrent) {
+              console.log('\nYou cannot delete the current active session.');
+              continue;
+            }
+
+            const confirmed = await ui.confirm(
+              [
+                plan.warning,
+                'Delete this saved session?',
+                formatSessionEntryLabel(
+                  plan.entry.sessionId,
+                  plan.entry.title,
+                  plan.entry.lastActivityAt
+                ),
+              ]
+                .filter(Boolean)
+                .join('\n')
+            );
+            if (!confirmed) {
+              console.log('\nDelete cancelled.');
+              continue;
+            }
+
+            await deleteSessionEntries([plan.entry]);
+            console.log(`\nDeleted saved session ${plan.entry.sessionId}.`);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.log(`\n${message}`);
+          }
+          continue;
+        }
+
+        if (request.kind === 'clear-idle') {
+          try {
+            const plan = await planIdleSessionCleanup(sessionStore.sessionId, request.count);
+            if (plan.entries.length === 0) {
+              console.log('\nNo idle saved sessions to delete.');
+              continue;
+            }
+
+            const preview = plan.entries
+              .slice(0, 5)
+              .map((entry) =>
+                formatSessionEntryLabel(entry.sessionId, entry.title, entry.lastActivityAt)
+              );
+            const extraCount =
+              plan.entries.length > preview.length ? plan.entries.length - preview.length : 0;
+            const confirmed = await ui.confirm(
+              [
+                plan.warning,
+                `Delete ${plan.entries.length} idle saved session${
+                  plan.entries.length === 1 ? '' : 's'
+                }?`,
+                ...preview,
+                extraCount > 0 ? `...and ${extraCount} more.` : undefined,
+              ]
+                .filter(Boolean)
+                .join('\n')
+            );
+            if (!confirmed) {
+              console.log('\nIdle-session cleanup cancelled.');
+              continue;
+            }
+
+            await deleteSessionEntries(plan.entries);
+            console.log(
+              `\nDeleted ${plan.entries.length} idle saved session${
+                plan.entries.length === 1 ? '' : 's'
+              }.`
+            );
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.log(`\n${message}`);
+          }
+          continue;
+        }
+
+        if (request.kind === 'prune') {
+          try {
+            const plan = await planSessionPrune(request.keepCount, sessionStore.sessionId);
+            if (plan.entries.length === 0) {
+              console.log(`\nNothing to prune. The latest ${request.keepCount} sessions are already all that remain.`);
+              continue;
+            }
+
+            const preview = plan.entries
+              .slice(0, 5)
+              .map((entry) =>
+                formatSessionEntryLabel(entry.sessionId, entry.title, entry.lastActivityAt)
+              );
+            const extraCount =
+              plan.entries.length > preview.length ? plan.entries.length - preview.length : 0;
+            const confirmed = await ui.confirm(
+              [
+                plan.warning,
+                `Prune saved sessions to keep the latest ${request.keepCount}?`,
+                plan.preservedCurrentOutsideWindow
+                  ? 'The current session is outside that window and will be preserved as well.'
+                  : undefined,
+                `This will delete ${plan.entries.length} older session${
+                  plan.entries.length === 1 ? '' : 's'
+                }.`,
+                ...preview,
+                extraCount > 0 ? `...and ${extraCount} more.` : undefined,
+              ]
+                .filter(Boolean)
+                .join('\n')
+            );
+            if (!confirmed) {
+              console.log('\nPrune cancelled.');
+              continue;
+            }
+
+            await deleteSessionEntries(plan.entries);
+            console.log(
+              `\nDeleted ${plan.entries.length} older saved session${
+                plan.entries.length === 1 ? '' : 's'
+              }.`
+            );
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.log(`\n${message}`);
+          }
           continue;
         }
 

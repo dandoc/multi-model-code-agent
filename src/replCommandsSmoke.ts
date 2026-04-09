@@ -120,6 +120,31 @@ async function main(): Promise<void> {
     'Expected malformed /sessions summary syntax to stay invalid.'
   );
 
+  const sessionsDelete = parseSessionsRequest('/sessions delete 2026-04-08T08-54-23-747Z-l4o0ov');
+  assert(
+    sessionsDelete.kind === 'delete' &&
+      sessionsDelete.sessionRef === '2026-04-08T08-54-23-747Z-l4o0ov',
+    'Expected /sessions delete <session-id> to parse correctly.'
+  );
+
+  const sessionsClearIdle = parseSessionsRequest('/sessions clear-idle 12');
+  assert(
+    sessionsClearIdle.kind === 'clear-idle' && sessionsClearIdle.count === 12,
+    'Expected /sessions clear-idle <count> to parse correctly.'
+  );
+
+  const sessionsPrune = parseSessionsRequest('/sessions prune 25');
+  assert(
+    sessionsPrune.kind === 'prune' && sessionsPrune.keepCount === 25,
+    'Expected /sessions prune <keep-count> to parse correctly.'
+  );
+
+  const sessionsPruneInvalid = parseSessionsRequest('/sessions prune latest');
+  assert(
+    sessionsPruneInvalid.kind === 'invalid',
+    'Expected malformed /sessions prune syntax to stay invalid.'
+  );
+
   const sessionsInvalid = parseSessionsRequest('/sessions 2026-04-08T08-54-23-747Z-l4o0ov');
   assert(
     sessionsInvalid.kind === 'invalid',

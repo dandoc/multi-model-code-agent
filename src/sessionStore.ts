@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -70,6 +70,18 @@ export type SessionListEntry = {
 export type SessionResolution = {
   entry: SessionListEntry | null;
   warning?: string;
+};
+
+export type SessionDeletePlan = {
+  entry: SessionListEntry | null;
+  warning?: string;
+  isCurrent: boolean;
+};
+
+export type SessionCleanupPlan = {
+  entries: SessionListEntry[];
+  warning?: string;
+  preservedCurrentOutsideWindow?: boolean;
 };
 
 export type SessionConversationLoad = {
@@ -691,6 +703,79 @@ function findLastMeaningfulCommand(
 
 export async function listRecentSessions(limit = 8): Promise<SessionListEntry[]> {
   return (await scanRecentSessions(limit)).entries;
+}
+
+export async function planSessionDelete(
+  specifier: string,
+  currentSessionId?: string
+): Promise<SessionDeletePlan> {
+  const resolution = await resolveSessionEntry(specifier, currentSessionId);
+  return {
+    entry: resolution.entry,
+    warning: resolution.warning,
+    isCurrent: resolution.entry?.sessionId === currentSessionId,
+  };
+}
+
+export async function planIdleSessionCleanup(
+  currentSessionId?: string,
+  count?: number
+): Promise<SessionCleanupPlan> {
+  const scan = await scanRecentSessions(500);
+  const idleEntries: SessionListEntry[] = [];
+
+  for (const entry of scan.entries) {
+    if (entry.sessionId === currentSessionId) {
+      continue;
+    }
+
+    const loaded = await loadSessionEvents(entry.sessionPath);
+    const summary = summarizeSessionActivity(loaded.events);
+    if (summary.profile === 'idle') {
+      idleEntries.push(entry);
+    }
+  }
+
+  const selected =
+    typeof count === 'number' && count > 0 ? idleEntries.slice(-count) : idleEntries;
+
+  return {
+    entries: [...selected].sort((left, right) => left.startedAt.localeCompare(right.startedAt)),
+    warning: renderScanWarning(scan, 'saved sessions'),
+  };
+}
+
+export async function planSessionPrune(
+  keepCount: number,
+  currentSessionId?: string
+): Promise<SessionCleanupPlan> {
+  const scan = await scanRecentSessions(500);
+  const keep = new Set<string>();
+
+  for (const entry of scan.entries.slice(0, Math.max(1, keepCount))) {
+    keep.add(entry.sessionId);
+  }
+
+  let preservedCurrentOutsideWindow = false;
+  if (currentSessionId && !keep.has(currentSessionId)) {
+    const hasCurrent = scan.entries.some((entry) => entry.sessionId === currentSessionId);
+    if (hasCurrent) {
+      keep.add(currentSessionId);
+      preservedCurrentOutsideWindow = true;
+    }
+  }
+
+  return {
+    entries: scan.entries.filter((entry) => !keep.has(entry.sessionId)),
+    warning: renderScanWarning(scan, 'saved sessions'),
+    preservedCurrentOutsideWindow,
+  };
+}
+
+export async function deleteSessionEntries(entries: SessionListEntry[]): Promise<void> {
+  for (const entry of entries) {
+    await rm(entry.sessionPath, { force: true });
+  }
 }
 
 export async function resolveSessionEntry(
