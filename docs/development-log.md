@@ -610,3 +610,17 @@ Validation:
 - `npm run build`
 - `npm run smoke:sessions`
 - `npm run smoke:repl`
+
+### 2026-04-09 - Manual session titles
+
+Summary:
+
+- added `/title <text>` so the current session can be renamed explicitly instead of relying only on the first saved prompt
+- title overrides are stored in the session JSONL log and automatically flow through `/sessions`, comparison, summary, resume recap, and status views
+- expanded session smoke coverage so title overrides stay visible in list, history, summary, status, and resume output
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:sessions`

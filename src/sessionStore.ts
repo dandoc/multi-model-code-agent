@@ -41,6 +41,11 @@ type SessionEvent =
       timestamp: string;
       reason: string;
       config: SessionConfigSnapshot;
+    }
+  | {
+      type: 'title';
+      timestamp: string;
+      title: string;
     };
 
 export type SessionStore = {
@@ -49,6 +54,7 @@ export type SessionStore = {
   logMessage: (role: ChatRole, content: string) => Promise<void>;
   logCommand: (command: string) => Promise<void>;
   logConfig: (reason: string, config: AgentConfig) => Promise<void>;
+  logTitle: (title: string) => Promise<void>;
 };
 
 export type SessionListEntry = {
@@ -200,6 +206,10 @@ function isSessionEvent(value: unknown): value is SessionEvent {
     return isString(value.reason) && isSessionConfigSnapshot(value.config);
   }
 
+  if (value.type === 'title') {
+    return isString(value.title);
+  }
+
   return false;
 }
 
@@ -252,6 +262,10 @@ function truncateInline(text: string, maxLength = 160): string {
   return `${normalized.slice(0, maxLength - 3)}...`;
 }
 
+function normalizeSessionTitle(title: string): string {
+  return truncateInline(title.trim(), 96);
+}
+
 function isLowSignalSessionCommand(command: string): boolean {
   const normalized = command.trim().toLowerCase();
   const lowSignalPrefixes = [
@@ -288,6 +302,16 @@ function isLowSignalSessionMessage(content: string): boolean {
 }
 
 function deriveSessionTitle(events: SessionEvent[], reason: string): string {
+  const latestTitleOverride = [...events]
+    .reverse()
+    .find(
+      (event): event is Extract<SessionEvent, { type: 'title' }> =>
+        event.type === 'title' && event.title.trim().length > 0
+    );
+  if (latestTitleOverride) {
+    return normalizeSessionTitle(latestTitleOverride.title);
+  }
+
   const firstUserMessage = events.find(
     (event): event is Extract<SessionEvent, { type: 'message' }> =>
       event.type === 'message' &&
@@ -526,6 +550,13 @@ export async function createSessionStore(
         timestamp: new Date().toISOString(),
         reason: configReason,
         config: sanitizeConfig(nextConfig),
+      });
+    },
+    logTitle: async (title) => {
+      await appendEvent(sessionPath, {
+        type: 'title',
+        timestamp: new Date().toISOString(),
+        title: normalizeSessionTitle(title),
       });
     },
   };
@@ -1039,6 +1070,11 @@ export async function renderSessionSummary(sessionPath: string, limit = 5): Prom
       lines.push(
         `- [${time}] config (${event.reason}): provider=${event.config.provider}, model=${event.config.model || '(provider default)'}, workdir=${event.config.workdir}`
       );
+      continue;
+    }
+
+    if (event.type === 'title') {
+      lines.push(`- [${time}] title: ${event.title}`);
     }
   }
 
@@ -1115,6 +1151,11 @@ export async function renderSessionHistory(sessionPath: string, limit = 12): Pro
       lines.push(
         `- [${time}] config (${event.reason}): provider=${event.config.provider}, model=${event.config.model || '(provider default)'}, workdir=${event.config.workdir}`
       );
+      continue;
+    }
+
+    if (event.type === 'title') {
+      lines.push(`- [${time}] title: ${event.title}`);
     }
   }
 

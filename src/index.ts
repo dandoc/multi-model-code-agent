@@ -102,6 +102,7 @@ function printReplHelp(): void {
       '  /sessions prune <keep-count>',
       '                       Keep the latest saved sessions and delete older ones',
       '  /session [count]      Alias for /sessions',
+      '  /title <text>         Set a custom title for the current session',
       '  /tools                Show tool catalog',
       '  /reset                Clear conversation history',
       '  /provider <name>      Switch provider (ollama, openai, codex) and save it to .env',
@@ -632,6 +633,24 @@ async function main(): Promise<void> {
         agent.reset();
         lastResumedSessionId = undefined;
         console.log('\nConversation reset.');
+        continue;
+      }
+
+      if (entry === '/title') {
+        console.log('\nUse /title <text>.');
+        continue;
+      }
+
+      if (entry.startsWith('/title ')) {
+        const nextTitle = entry.slice('/title '.length).trim();
+        if (!nextTitle) {
+          console.log('\nUse /title <text>.');
+          continue;
+        }
+
+        await logSessionEvent(() => sessionStore.logCommand(entry));
+        await logSessionEvent(() => sessionStore.logTitle(nextTitle));
+        console.log(`\nSession title updated to: ${nextTitle}`);
         continue;
       }
 

@@ -122,6 +122,7 @@ npm run dev
 - `/sessions clear-idle [count]`
 - `/sessions prune <keep-count>`
 - `/session [count]`
+- `/title <text>`
 - `/tools`
 - `/reset`
 - `/provider ollama|openai|codex` persists to `.env`
@@ -177,6 +178,7 @@ Each REPL session now writes a small JSONL log so you can inspect recent activit
 - use `/sessions delete <session-id>` to remove one saved session by full or unique-prefix id
 - use `/sessions clear-idle` to remove idle startup-only sessions, oldest first
 - use `/sessions prune <keep-count>` to keep only the latest saved sessions and delete older ones after confirmation
+- use `/title <text>` to override the current session title with something easier to recognize later
 - `/session` is a short alias for `/sessions`
 - `/sessions` now shows a short title from the first saved user prompt and the last activity time, so similar sessions are easier to tell apart
 - use `/history latest` to inspect the most recent earlier session

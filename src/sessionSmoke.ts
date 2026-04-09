@@ -164,13 +164,14 @@ async function main(): Promise<void> {
     await store.logMessage('assistant', 'This is a session smoke test reply.');
     await store.logCommand(`/api-key ${secret}`);
     await store.logConfig('api-key update', config);
+    await store.logTitle('Current session custom title');
 
     const raw = await readFile(store.sessionPath, 'utf8');
     console.log(`\n[session-smoke] raw session log:\n${raw}`);
 
     assertIncludesAll(
       raw,
-      ['"type":"session_started"', '"type":"message"', '"type":"command"', '"type":"config"', '"apiKeySet":true'],
+      ['"type":"session_started"', '"type":"message"', '"type":"command"', '"type":"config"', '"type":"title"', '"apiKeySet":true'],
       'raw session log'
     );
 
@@ -191,11 +192,12 @@ async function main(): Promise<void> {
         `Path: ${store.sessionPath}`,
         `Workdir: ${workdir}`,
         'Warning: ignored 2 malformed JSONL lines while reading this session.',
-        'Recent events (4):',
+        'Recent events (5):',
         'user: Summarize this project.',
         'assistant: This is a session smoke test reply.',
         'command: /api-key [redacted]',
         `config (api-key update): provider=ollama, model=qwen2.5-coder:14b, workdir=${workdir}`,
+        'title: Current session custom title',
       ],
       'rendered history'
     );
@@ -222,7 +224,7 @@ async function main(): Promise<void> {
       renderResumeContext(currentConversation, config),
       [
         `Resumed 2 messages from session ${store.sessionId}.`,
-        'Title: Summarize this project.',
+        'Title: Current session custom title',
         'Activity: user=1, assistant=1, repl commands=1, config=1, profile=mixed',
         'First request: Summarize this project.',
         'Last assistant reply: This is a session smoke test reply.',
@@ -235,7 +237,7 @@ async function main(): Promise<void> {
         'Current status',
         `Session id: ${store.sessionId}`,
         `Path: ${store.sessionPath}`,
-        'Title: Summarize this project.',
+        'Title: Current session custom title',
         `Runtime: provider=ollama, model=qwen2.5-coder:14b, baseUrl=http://127.0.0.1:11434, workdir=${workdir}`,
         'Resume source: (none)',
         'Saved activity: user=1, assistant=1, repl commands=1, config=1, profile=mixed',
@@ -266,7 +268,7 @@ async function main(): Promise<void> {
         `Root: ${expectedSessionsDir}`,
         'Warning: skipped 2 corrupted session logs and ignored malformed lines in 1 session log while scanning saved sessions.',
         `- id: ${store.sessionId} (current)`,
-        '  title: Summarize this project.',
+        '  title: Current session custom title',
         '  last active: ',
         `  provider=ollama, model=qwen2.5-coder:14b, workdir=${workdir}, reason=session smoke`,
         `- id: ${previousStore.sessionId}`,
@@ -353,7 +355,7 @@ async function main(): Promise<void> {
         'Recent session comparison (2)',
         'Latest first (idle hidden):',
         `- id: ${store.sessionId} (current)`,
-        '  title: Summarize this project.',
+        '  title: Current session custom title',
         '  activity: user=1, assistant=1, repl commands=1, config=1, total=4',
         '  profile: mixed',
         `- id: ${previousStore.sessionId}`,
@@ -385,7 +387,7 @@ async function main(): Promise<void> {
       currentSummary,
       [
         `Session summary: ${store.sessionId}`,
-        'Title: Summarize this project.',
+        'Title: Current session custom title',
         `Provider/model: ollama / qwen2.5-coder:14b`,
         `Workdir: ${workdir}`,
         'Activity: user=1, assistant=1, repl commands=1, config=1, total=4',
@@ -423,7 +425,7 @@ async function main(): Promise<void> {
     if (!currentEntry) {
       throw new Error('Current session was missing from recent session entries.');
     }
-    if (currentEntry.title !== 'Summarize this project.') {
+    if (currentEntry.title !== 'Current session custom title') {
       throw new Error(`Unexpected current session title: ${currentEntry.title}`);
     }
     if (!currentEntry.lastActivityAt || Number.isNaN(new Date(currentEntry.lastActivityAt).getTime())) {
