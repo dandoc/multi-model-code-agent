@@ -700,3 +700,16 @@ Validation:
 
 - doc-only change
 - `npm run smoke:packaging`
+
+### 2026-04-10 - Korean companion docs
+
+Summary:
+
+- added `README.ko.md` as a Korean companion to the main project README
+- added Korean companion docs for the inspiration, milestones, and development log files
+- linked the Korean docs from `README.md` so the English and Korean documentation sets are easy to discover together
+
+Validation:
+
+- doc-only change
+- `npm run smoke:packaging`

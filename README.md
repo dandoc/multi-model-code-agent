@@ -41,6 +41,11 @@ This is an MVP, so the focus is clarity and learnability over raw power.
 - `docs/claude-code-inspiration.md` explains what this project borrows conceptually from Claude Code and what it does not copy.
 - `docs/milestones.md` tracks the current roadmap and milestone definitions.
 - `docs/development-log.md` records important project changes, decisions, and known issues.
+- Korean companions are available in:
+  - `README.ko.md`
+  - `docs/claude-code-inspiration.ko.md`
+  - `docs/milestones.ko.md`
+  - `docs/development-log.ko.md`
 
 ## How it works
 
