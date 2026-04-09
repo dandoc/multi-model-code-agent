@@ -34,6 +34,8 @@ import {
   parseHistoryRequest,
   parseResumeRequest,
   parseSessionsRequest,
+  shouldLogHistoryViewCommand,
+  shouldLogSessionsViewCommand,
 } from './replCommands.js';
 import { createTools, renderToolCatalog } from './tools.js';
 
@@ -294,8 +296,10 @@ async function main(): Promise<void> {
       }
 
       if (entry === '/history' || entry.startsWith('/history ')) {
-        await logSessionEvent(() => sessionStore.logCommand(entry));
         const request = parseHistoryRequest(entry);
+        if (shouldLogHistoryViewCommand(request)) {
+          await logSessionEvent(() => sessionStore.logCommand(entry));
+        }
 
         if (!request.sessionRef || request.sessionRef === 'current') {
           console.log(`\n${await renderSessionHistory(sessionStore.sessionPath, request.count)}`);
@@ -387,11 +391,15 @@ async function main(): Promise<void> {
       }
 
       if (entry === '/sessions' || entry.startsWith('/sessions ')) {
-        await logSessionEvent(() => sessionStore.logCommand(entry));
         const request = parseSessionsRequest(entry);
         if (request.kind === 'invalid') {
+          await logSessionEvent(() => sessionStore.logCommand(entry));
           console.log(`\n${request.reason}`);
           continue;
+        }
+
+        if (shouldLogSessionsViewCommand(request)) {
+          await logSessionEvent(() => sessionStore.logCommand(entry));
         }
 
         if (request.kind === 'summary') {

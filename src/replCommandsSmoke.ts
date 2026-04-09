@@ -5,6 +5,8 @@ import {
   parsePositiveCount,
   parseResumeRequest,
   parseSessionsRequest,
+  shouldLogHistoryViewCommand,
+  shouldLogSessionsViewCommand,
 } from './replCommands.js';
 
 function assert(condition: unknown, message: string): void {
@@ -91,6 +93,32 @@ async function main(): Promise<void> {
       sessionsSummaryById.count === 7,
     'Expected /sessions summary <session-id> <count> to parse correctly.'
   );
+  assert(
+    shouldLogSessionsViewCommand(sessionsSummaryCurrent) === false,
+    'Expected current-session summaries not to pollute the current session log.'
+  );
+  assert(
+    shouldLogSessionsViewCommand(sessionsSummaryById) === true,
+    'Expected earlier-session summaries to stay logged.'
+  );
+
+  const sessionsSummaryCurrentExtra = parseSessionsRequest('/sessions summary current extra');
+  assert(
+    sessionsSummaryCurrentExtra.kind === 'invalid',
+    'Expected /sessions summary current extra to be rejected.'
+  );
+
+  const sessionsSummaryLatestExtra = parseSessionsRequest('/sessions summary latest 8 extra');
+  assert(
+    sessionsSummaryLatestExtra.kind === 'invalid',
+    'Expected /sessions summary latest 8 extra to be rejected.'
+  );
+
+  const sessionsSummaryGarbage = parseSessionsRequest('/sessions summary foo bar baz');
+  assert(
+    sessionsSummaryGarbage.kind === 'invalid',
+    'Expected malformed /sessions summary syntax to stay invalid.'
+  );
 
   const sessionsInvalid = parseSessionsRequest('/sessions 2026-04-08T08-54-23-747Z-l4o0ov');
   assert(
@@ -102,6 +130,14 @@ async function main(): Promise<void> {
   assert(
     historyById.sessionRef === '2026-04-08T08-54-23-747Z-l4o0ov' && historyById.count === 12,
     'Expected /history <session-id> to resolve as a session reference.'
+  );
+  assert(
+    shouldLogHistoryViewCommand(parseHistoryRequest('/history')) === false,
+    'Expected current-session /history lookups not to pollute the current session log.'
+  );
+  assert(
+    shouldLogHistoryViewCommand(parseHistoryRequest('/history latest')) === true,
+    'Expected earlier-session /history lookups to stay logged.'
   );
 
   const resumeById = parseResumeRequest('/resume 2026-04-08T08-54-23-747Z-l4o0ov');

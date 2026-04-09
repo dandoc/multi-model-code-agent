@@ -537,3 +537,18 @@ Validation:
 - `npm run build`
 - `npm run smoke:sessions`
 - `npm run smoke:repl`
+
+### 2026-04-09 - Session summary follow-up fixes
+
+Summary:
+
+- current-target `/history` and `/sessions summary` now avoid logging the view command into the current session, so summaries and histories do not self-pollute
+- tightened `/sessions summary` parsing so extra trailing tokens are rejected instead of being silently ignored
+- expanded REPL command smoke coverage for current-view logging rules and malformed summary syntax
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:sessions`
+- `npm run smoke:repl`

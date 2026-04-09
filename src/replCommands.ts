@@ -65,6 +65,10 @@ export function parseResumeRequest(entry: string): { sessionRef?: string; count:
   };
 }
 
+export function shouldLogHistoryViewCommand(request: { sessionRef?: string }): boolean {
+  return Boolean(request.sessionRef && request.sessionRef !== 'current');
+}
+
 export type SessionsRequest =
   | {
       kind: 'list';
@@ -127,10 +131,17 @@ export function parseSessionsRequest(entry: string): SessionsRequest {
       };
     }
 
+    if (args.length === 3 && isWholeNumberText(args[2])) {
+      return {
+        kind: 'summary',
+        sessionRef: args[1],
+        count: parsePositiveCount(args[2], 5, 20),
+      };
+    }
+
     return {
-      kind: 'summary',
-      sessionRef: args[1],
-      count: parsePositiveCount(args[2], 5, 20),
+      kind: 'invalid',
+      reason: 'Use /sessions summary [current|latest|session-id] [count].',
     };
   }
 
@@ -216,6 +227,10 @@ export function parseSessionsRequest(entry: string): SessionsRequest {
     reason:
       'Use /sessions [count], /sessions summary <current|latest|session-id> [count], /sessions compare [count], /sessions compare all [count], or /sessions search <query> [count]. For a specific session use /history <session-id> or /resume <session-id>.',
   };
+}
+
+export function shouldLogSessionsViewCommand(request: SessionsRequest): boolean {
+  return request.kind !== 'summary' || request.sessionRef !== 'current';
 }
 
 export function normalizeReplCommandAlias(entry: string): string {
