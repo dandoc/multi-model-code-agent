@@ -658,6 +658,7 @@ Summary:
 - `/temperature` and `/max-turns` now tune the current session runtime without restarting or persisting to `.env`
 - the system prompt now injects provider/model-specific operating guidance so Qwen, Gemma, Codex, and OpenAI-compatible paths get different grounding and failure-handling hints
 - runtime request failures are now classified by provider so Ollama/OpenAI-compatible/Codex errors return provider-specific causes and next steps
+- Ollama/OpenAI-compatible chat requests now retry once on transient timeout/network/429/5xx failures, with adapter smoke coverage for retry vs non-retry paths
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:

@@ -169,6 +169,7 @@ This runs:
 - a path-boundary regression check
 - a session-history persistence and redaction check
 - a model-catalog search and family-hint regression check
+- a provider adapter retry/fallback regression check
 - a provider-readiness doctor regression check
 
 For a focused shell-selection regression check, run:

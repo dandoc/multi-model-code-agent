@@ -58,6 +58,63 @@ interface CodexExecEvent {
 const CODEX_LOGIN_TIMEOUT_MS = 15_000;
 const CODEX_REQUEST_TIMEOUT_MS = 120_000;
 const CODEX_RETRY_TIMEOUT_MS = 180_000;
+const PROVIDER_RETRY_DELAY_MS = 350;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function isRetryableHttpStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+function isRetryableFetchError(error: unknown): boolean {
+  const message = normalizeErrorMessage(error).toLowerCase();
+  return includesAny(message, [
+    'timed out',
+    'timeout',
+    'fetch failed',
+    'networkerror',
+    'econnrefused',
+    'enotfound',
+    'socket hang up',
+    'ecanceled',
+    'aborted',
+  ]);
+}
+
+async function retryProviderRequest<T>(
+  fn: (attempt: number) => Promise<T>,
+  shouldRetryResult: (value: T) => boolean
+): Promise<T> {
+  let lastResult: T | undefined;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const result = await fn(attempt);
+      lastResult = result;
+      if (!shouldRetryResult(result) || attempt === 2) {
+        return result;
+      }
+      await sleep(PROVIDER_RETRY_DELAY_MS);
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableFetchError(error) || attempt === 2) {
+        throw error;
+      }
+      await sleep(PROVIDER_RETRY_DELAY_MS);
+    }
+  }
+
+  if (lastResult !== undefined) {
+    return lastResult;
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
 
 function getCodexCommand(): string {
   return 'codex';
@@ -466,21 +523,25 @@ class OllamaAdapter implements ModelAdapter {
   readonly provider = 'ollama' as const;
 
   async complete(messages: ChatMessage[], config: AgentConfig): Promise<string> {
-    const response = await fetch(`${config.baseUrl}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: config.model,
-        stream: false,
-        messages,
-        options: {
-          temperature: config.temperature,
-        },
-      }),
-      signal: AbortSignal.timeout(120_000),
-    });
+    const response = await retryProviderRequest(
+      async () =>
+        await fetch(`${config.baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: config.model,
+            stream: false,
+            messages,
+            options: {
+              temperature: config.temperature,
+            },
+          }),
+          signal: AbortSignal.timeout(120_000),
+        }),
+      (candidate) => !candidate.ok && isRetryableHttpStatus(candidate.status)
+    );
 
     if (!response.ok) {
       throw new Error(
@@ -504,19 +565,23 @@ class OpenAICompatibleAdapter implements ModelAdapter {
       throw new Error('OPENAI_API_KEY is required for the openai provider.');
     }
 
-    const response = await fetch(`${config.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: config.model,
-        temperature: config.temperature,
-        messages,
-      }),
-      signal: AbortSignal.timeout(120_000),
-    });
+    const response = await retryProviderRequest(
+      async () =>
+        await fetch(`${config.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${config.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: config.model,
+            temperature: config.temperature,
+            messages,
+          }),
+          signal: AbortSignal.timeout(120_000),
+        }),
+      (candidate) => !candidate.ok && isRetryableHttpStatus(candidate.status)
+    );
 
     if (!response.ok) {
       throw new Error(
