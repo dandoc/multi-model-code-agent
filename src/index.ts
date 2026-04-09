@@ -23,6 +23,7 @@ import {
 import {
   createSessionStore,
   loadSessionConversation,
+  renderResumeContext,
   renderSessionComparison,
   renderSessionHistory,
   renderSessionList,
@@ -361,25 +362,17 @@ async function main(): Promise<void> {
 
           agent.replaceHistory(loadedConversation.messages);
 
-          const sourceSummary = `source: provider=${
-            loadedConversation.provider ?? resolution.entry.provider
-          }, model=${
-            loadedConversation.model || resolution.entry.model || '(provider default)'
-          }, workdir=${loadedConversation.workdir ?? resolution.entry.workdir}`;
-          const currentSummary = `current runtime: provider=${config.provider}, model=${
-            config.model || '(provider default)'
-          }, workdir=${config.workdir}`;
-          const resumeMessage = [
-            loadedConversation.warning,
-            `Resumed ${loadedConversation.messages.length} message${
-              loadedConversation.messages.length === 1 ? '' : 's'
-            } from session ${loadedConversation.sessionId}.`,
-            `Total saved messages in that session: ${loadedConversation.totalMessages}.`,
-            sourceSummary,
-            currentSummary,
-          ]
-            .filter(Boolean)
-            .join('\n');
+          const resumeMessage = renderResumeContext(
+            {
+              ...loadedConversation,
+              provider: loadedConversation.provider ?? resolution.entry.provider,
+              model: loadedConversation.model || resolution.entry.model,
+              workdir: loadedConversation.workdir ?? resolution.entry.workdir,
+              title: loadedConversation.title || resolution.entry.title,
+              lastActivityAt: loadedConversation.lastActivityAt ?? resolution.entry.lastActivityAt,
+            },
+            config
+          );
 
           console.log(`\n${resumeMessage}`);
           await logSessionEvent(() => sessionStore.logMessage('assistant', resumeMessage));

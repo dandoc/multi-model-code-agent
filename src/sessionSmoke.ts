@@ -7,6 +7,7 @@ import {
   createSessionStore,
   loadSessionConversation,
   listRecentSessions,
+  renderResumeContext,
   renderSessionComparison,
   renderSessionHistory,
   renderSessionList,
@@ -193,6 +194,17 @@ async function main(): Promise<void> {
         `Unexpected current-session resume warning: ${currentConversation.warning ?? '(missing)'}`
       );
     }
+    assertIncludesAll(
+      renderResumeContext(currentConversation, config),
+      [
+        `Resumed 2 messages from session ${store.sessionId}.`,
+        'Title: Summarize this project.',
+        'Activity: user=1, assistant=1, repl commands=1, config=1, profile=mixed',
+        'First request: Summarize this project.',
+        'Last assistant reply: This is a session smoke test reply.',
+      ],
+      'current resume context'
+    );
 
     await writeFile(
       corruptedSessionPath,
@@ -406,6 +418,20 @@ async function main(): Promise<void> {
     if (!resumedConversation.messages[1]?.content.includes('This is the earlier session reply.')) {
       throw new Error('The resumed conversation is missing the earlier assistant reply.');
     }
+    assertIncludesAll(
+      renderResumeContext(resumedConversation, config),
+      [
+        `Resumed 2 messages from session ${previousStore.sessionId}.`,
+        'Title: Show me the earlier session.',
+        `Source session: provider=ollama, model=qwen2.5-coder:7b, workdir=${previousWorkdir}`,
+        `Current runtime: provider=ollama, model=qwen2.5-coder:14b, workdir=${workdir}`,
+        'Note: resume restores conversation only. The current runtime above will handle the next turn.',
+        'Activity: user=1, assistant=1, repl commands=0, config=0, profile=light',
+        'First request: Show me the earlier session.',
+        'Last assistant reply: This is the earlier session reply.',
+      ],
+      'previous resume context'
+    );
 
     const bulkRoot = path.join(tempRoot, 'bulk-home');
     const bulkSessionsDir = path.join(bulkRoot, 'sessions');

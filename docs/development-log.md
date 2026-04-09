@@ -552,3 +552,17 @@ Validation:
 - `npm run build`
 - `npm run smoke:sessions`
 - `npm run smoke:repl`
+
+### 2026-04-09 - Resume context recap
+
+Summary:
+
+- `/resume` now prints a richer recap after loading a saved conversation, including the saved session title, started/last-active timestamps, source-vs-current runtime, activity profile, and the latest meaningful messages
+- extended `loadSessionConversation()` so resume flows can reuse the same session metadata that powers summary and comparison views
+- expanded session smoke coverage so resume output itself stays grounded and useful, not just the restored message list
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:sessions`

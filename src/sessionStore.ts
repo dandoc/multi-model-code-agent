@@ -71,12 +71,23 @@ export type SessionResolution = {
 export type SessionConversationLoad = {
   sessionId: string;
   startedAt?: string;
+  lastActivityAt?: string;
+  title?: string;
   workdir?: string;
   provider?: AgentConfig['provider'];
   model?: string;
   reason?: string;
   messages: ChatMessage[];
   totalMessages: number;
+  userMessages: number;
+  assistantMessages: number;
+  replCommands: number;
+  configChanges: number;
+  profile: string;
+  firstRequest?: string;
+  lastUserMessage?: string;
+  lastAssistantReply?: string;
+  lastMeaningfulCommand?: string;
   warning?: string;
 };
 
@@ -979,6 +990,11 @@ export async function loadSessionConversation(
   const messageEvents = loaded.events.filter(
     (event): event is Extract<SessionEvent, { type: 'message' }> => event.type === 'message'
   );
+  const summary = summarizeSessionActivity(loaded.events);
+  const firstUserMessage = findFirstMeaningfulUserMessage(loaded.events);
+  const lastUserMessage = findLastUserMessage(loaded.events);
+  const lastAssistantMessage = findLastAssistantMessage(loaded.events);
+  const lastMeaningfulCommand = findLastMeaningfulCommand(loaded.events);
   const messages = messageEvents
     .slice(-Math.max(1, limit))
     .map((event) => ({
@@ -1003,6 +1019,11 @@ export async function loadSessionConversation(
       startedEvent && startedEvent.type === 'session_started'
         ? startedEvent.timestamp
         : undefined,
+    lastActivityAt: loaded.events.at(-1)?.timestamp,
+    title:
+      startedEvent && startedEvent.type === 'session_started'
+        ? deriveSessionTitle(loaded.events, startedEvent.reason)
+        : '(unknown session)',
     workdir:
       startedEvent && startedEvent.type === 'session_started'
         ? startedEvent.config.workdir
@@ -1021,9 +1042,65 @@ export async function loadSessionConversation(
         : undefined,
     messages,
     totalMessages: messageEvents.length,
+    userMessages: summary.userMessages,
+    assistantMessages: summary.assistantMessages,
+    replCommands: summary.replCommands,
+    configChanges: summary.configChanges,
+    profile: summary.profile,
+    firstRequest: firstUserMessage?.content,
+    lastUserMessage: lastUserMessage?.content,
+    lastAssistantReply: lastAssistantMessage?.content,
+    lastMeaningfulCommand: lastMeaningfulCommand?.command,
     warning:
       warningParts.length > 0
         ? `Warning: ${warningParts.join(' and ')} while resuming this session.`
         : undefined,
   };
+}
+
+export function renderResumeContext(
+  loadedConversation: SessionConversationLoad,
+  currentConfig: AgentConfig
+): string {
+  const sourceSummary = `Source session: provider=${
+    loadedConversation.provider ?? '(unknown)'
+  }, model=${
+    loadedConversation.model || '(provider default)'
+  }, workdir=${loadedConversation.workdir ?? '(unknown)'}`;
+  const currentSummary = `Current runtime: provider=${currentConfig.provider}, model=${
+    currentConfig.model || '(provider default)'
+  }, workdir=${currentConfig.workdir}`;
+
+  const lines = [
+    loadedConversation.warning,
+    `Resumed ${loadedConversation.messages.length} message${
+      loadedConversation.messages.length === 1 ? '' : 's'
+    } from session ${loadedConversation.sessionId}.`,
+    `Total saved messages in that session: ${loadedConversation.totalMessages}.`,
+    loadedConversation.title ? `Title: ${loadedConversation.title}` : undefined,
+    loadedConversation.startedAt
+      ? `Started: ${formatSessionTimestamp(loadedConversation.startedAt)}`
+      : undefined,
+    loadedConversation.lastActivityAt
+      ? `Last active: ${formatSessionTimestamp(loadedConversation.lastActivityAt)}`
+      : undefined,
+    sourceSummary,
+    currentSummary,
+    'Note: resume restores conversation only. The current runtime above will handle the next turn.',
+    `Activity: user=${loadedConversation.userMessages}, assistant=${loadedConversation.assistantMessages}, repl commands=${loadedConversation.replCommands}, config=${loadedConversation.configChanges}, profile=${loadedConversation.profile}`,
+    loadedConversation.firstRequest
+      ? `First request: ${truncateInline(loadedConversation.firstRequest)}`
+      : undefined,
+    loadedConversation.lastUserMessage
+      ? `Last user message: ${truncateInline(loadedConversation.lastUserMessage)}`
+      : undefined,
+    loadedConversation.lastAssistantReply
+      ? `Last assistant reply: ${truncateInline(loadedConversation.lastAssistantReply)}`
+      : undefined,
+    loadedConversation.lastMeaningfulCommand
+      ? `Last meaningful command: ${loadedConversation.lastMeaningfulCommand}`
+      : undefined,
+  ].filter(Boolean);
+
+  return lines.join('\n');
 }
