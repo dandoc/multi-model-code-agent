@@ -36,6 +36,23 @@ type ProviderDiagnostics = {
   checks: DiagnosticCheck[];
 };
 
+type RuntimePreflightIssueLevel = 'warn' | 'error';
+
+type RuntimePreflightIssue = {
+  level: RuntimePreflightIssueLevel;
+  label: string;
+  detail: string;
+  hint?: string;
+};
+
+export type RuntimeTransitionPreflight = {
+  provider: ModelProvider;
+  currentModel: string;
+  baseUrl: string;
+  status: DiagnosticStatus;
+  issues: RuntimePreflightIssue[];
+};
+
 type OllamaProbeResult = {
   available: boolean;
   detail: string;
@@ -53,6 +70,11 @@ type CodexProbeResult = Awaited<ReturnType<typeof getCodexLoginStatus>>;
 type ProviderDiagnosticDeps = {
   probeOllama?: () => Promise<OllamaProbeResult>;
   probeOpenAI?: (baseUrl: string, apiKey: string) => Promise<OpenAIProbeResult>;
+  probeCodex?: (config: AgentConfig) => Promise<CodexProbeResult>;
+};
+
+type RuntimePreflightDeps = {
+  probeOllama?: () => Promise<OllamaProbeResult>;
   probeCodex?: (config: AgentConfig) => Promise<CodexProbeResult>;
 };
 
@@ -413,12 +435,34 @@ function pushDiagnostic(
   checks.push({ level, label, detail, hint });
 }
 
+function pushPreflightIssue(
+  issues: RuntimePreflightIssue[],
+  level: RuntimePreflightIssueLevel,
+  label: string,
+  detail: string,
+  hint?: string
+): void {
+  issues.push({ level, label, detail, hint });
+}
+
 function computeDiagnosticStatus(checks: DiagnosticCheck[]): DiagnosticStatus {
   if (checks.some((check) => check.level === 'error')) {
     return 'blocked';
   }
 
   if (checks.some((check) => check.level === 'warn')) {
+    return 'warning';
+  }
+
+  return 'ready';
+}
+
+function computePreflightStatus(issues: RuntimePreflightIssue[]): DiagnosticStatus {
+  if (issues.some((issue) => issue.level === 'error')) {
+    return 'blocked';
+  }
+
+  if (issues.some((issue) => issue.level === 'warn')) {
     return 'warning';
   }
 
@@ -731,4 +775,153 @@ export async function renderModelDiagnostics(
     providers.map((provider) => buildProviderDiagnostics(config, provider, deps))
   );
   return diagnostics.map((entry) => renderProviderDiagnostics(entry)).join('\n\n');
+}
+
+export async function buildRuntimeTransitionPreflight(
+  nextConfig: AgentConfig,
+  deps: RuntimePreflightDeps = {}
+): Promise<RuntimeTransitionPreflight> {
+  const issues: RuntimePreflightIssue[] = [];
+  const currentModel = nextConfig.model.trim();
+  const baseUrl = nextConfig.baseUrl.trim();
+
+  if (currentModel && !isModelCompatible(nextConfig.provider, currentModel)) {
+    pushPreflightIssue(
+      issues,
+      'error',
+      'model compatibility',
+      `The model "${currentModel}" does not look compatible with provider ${nextConfig.provider}.`,
+      'Use /models to inspect choices or /model default to reset.'
+    );
+  }
+
+  if (nextConfig.provider === 'ollama') {
+    if (!baseUrl) {
+      pushPreflightIssue(
+        issues,
+        'warn',
+        'base URL',
+        'No Ollama base URL is configured yet.',
+        `Set /base-url ${providerDefaultBaseUrl('ollama')} if your local server uses the default endpoint.`
+      );
+    } else if (!isLikelyHttpUrl(baseUrl)) {
+      pushPreflightIssue(
+        issues,
+        'warn',
+        'base URL',
+        `The Ollama base URL "${baseUrl}" does not look like an http(s) endpoint.`,
+        'Use a URL like http://127.0.0.1:11434.'
+      );
+    }
+
+    const probe = await (deps.probeOllama ?? probeOllamaAvailability)();
+    if (!probe.available) {
+      pushPreflightIssue(
+        issues,
+        'warn',
+        'local CLI',
+        probe.detail,
+        'Install Ollama and confirm `ollama list` works before sending a request.'
+      );
+    } else if (currentModel && !probe.models.includes(currentModel)) {
+      pushPreflightIssue(
+        issues,
+        'warn',
+        'installed models',
+        `The Ollama model "${currentModel}" is not present in the local list.`,
+        `Run \`ollama pull ${currentModel}\` or switch to one of the installed models with /model.`
+      );
+    }
+  } else if (nextConfig.provider === 'openai') {
+    if (!baseUrl) {
+      pushPreflightIssue(
+        issues,
+        'warn',
+        'base URL',
+        'No OpenAI-compatible base URL is configured yet.',
+        'Set /base-url <https://your-endpoint/v1> before sending a request.'
+      );
+    } else if (!isLikelyHttpUrl(baseUrl)) {
+      pushPreflightIssue(
+        issues,
+        'warn',
+        'base URL',
+        `The OpenAI-compatible base URL "${baseUrl}" does not look like an http(s) endpoint.`,
+        'Use a URL like https://api.openai.com/v1 or your compatible provider URL.'
+      );
+    }
+
+    if (!nextConfig.apiKey) {
+      pushPreflightIssue(
+        issues,
+        'warn',
+        'API key',
+        'No API key is configured for the OpenAI-compatible provider.',
+        'Set OPENAI_API_KEY in .env or use /api-key <value> for the current session.'
+      );
+    }
+
+    if (!currentModel) {
+      pushPreflightIssue(
+        issues,
+        'warn',
+        'model selection',
+        'No explicit model is set for the OpenAI-compatible provider.',
+        'Use /model <name> before sending a request.'
+      );
+    }
+  } else {
+    const probe = await (deps.probeCodex ?? getCodexLoginStatus)(nextConfig);
+    if (!probe.available) {
+      pushPreflightIssue(
+        issues,
+        'warn',
+        'Codex CLI',
+        probe.detail,
+        'Install the Codex CLI and make sure `codex` is available in this shell.'
+      );
+    } else if (!probe.loggedIn) {
+      pushPreflightIssue(
+        issues,
+        'warn',
+        'ChatGPT login',
+        probe.detail,
+        'Run `codex login` before sending a request with the codex provider.'
+      );
+    }
+  }
+
+  return {
+    provider: nextConfig.provider,
+    currentModel,
+    baseUrl,
+    status: computePreflightStatus(issues),
+    issues,
+  };
+}
+
+export function renderRuntimeTransitionPreflight(
+  nextConfig: AgentConfig,
+  preflight: RuntimeTransitionPreflight
+): string {
+  const lines = [
+    'Runtime transition preflight',
+    `target       provider=${nextConfig.provider}, model=${nextConfig.model || '(provider default)'}, workdir=${nextConfig.workdir}`,
+    `status       ${preflight.status}`,
+  ];
+
+  if (preflight.issues.length === 0) {
+    lines.push('No obvious readiness issues detected.');
+    return lines.join('\n');
+  }
+
+  lines.push('checks');
+  for (const issue of preflight.issues) {
+    lines.push(`- ${issue.level.padEnd(5)} ${issue.label}: ${issue.detail}`);
+    if (issue.hint) {
+      lines.push(`  hint: ${issue.hint}`);
+    }
+  }
+
+  return lines.join('\n');
 }

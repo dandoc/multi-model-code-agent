@@ -659,6 +659,8 @@ Summary:
 - the system prompt now injects provider/model-specific operating guidance so Qwen, Gemma, Codex, and OpenAI-compatible paths get different grounding and failure-handling hints
 - runtime request failures are now classified by provider so Ollama/OpenAI-compatible/Codex errors return provider-specific causes and next steps
 - Ollama/OpenAI-compatible chat requests now retry once on transient timeout/network/429/5xx failures, with adapter smoke coverage for retry vs non-retry paths
+- provider/model/base-url switches now run a quick runtime preflight and surface readiness warnings before resetting the conversation
+- `/profiles load` and `/resume runtime` now include the same preflight in their preview/confirm flow, so missing keys, missing local models, or missing Codex login show up before the runtime is applied
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:

@@ -25,11 +25,13 @@ import {
   saveProfile,
 } from './profileStore.js';
 import {
+  buildRuntimeTransitionPreflight,
   isModelCompatible,
   providerBaseUrlEnvKey,
   providerModelEnvKey,
   renderModelCatalogs,
   renderModelDiagnostics,
+  renderRuntimeTransitionPreflight,
   resolveStoredModelForProvider,
 } from './providerModels.js';
 import {
@@ -310,6 +312,30 @@ async function main(): Promise<void> {
     }
   };
 
+  const runRuntimeTransitionPreflight = async (
+    nextConfig: AgentConfig,
+    options?: {
+      requireConfirm?: boolean;
+      confirmLabel?: string;
+    }
+  ): Promise<boolean> => {
+    const preflight = await buildRuntimeTransitionPreflight(nextConfig);
+    if (preflight.status === 'ready') {
+      return true;
+    }
+
+    const rendered = renderRuntimeTransitionPreflight(nextConfig, preflight);
+    if (!options?.requireConfirm) {
+      console.log(`\n${rendered}`);
+      return true;
+    }
+
+    const confirmed = await ui.confirm(
+      [rendered, options.confirmLabel || 'Apply this runtime anyway?'].join('\n')
+    );
+    return confirmed;
+  };
+
   const runPrompt = async (text: string): Promise<boolean> => {
     const runtimeAnswer = answerRuntimeConfigQuestion(text, config);
     console.log(`\n[user] ${text}`);
@@ -478,17 +504,27 @@ async function main(): Promise<void> {
                   : (loadedConversation.baseUrl || providerDefaultBaseUrl(restoredProvider)).replace(/\/+$/, '');
               const restoredModel =
                 loadedConversation.model || providerDefaultModel(restoredProvider);
+              const nextConfig = updateConfig(config, {
+                provider: restoredProvider,
+                model: restoredModel,
+                baseUrl: restoredBaseUrl,
+                workdir: restoredWorkdir,
+                autoApprove: loadedConversation.autoApprove ?? config.autoApprove,
+                maxTurns: loadedConversation.maxTurns ?? config.maxTurns,
+                temperature: loadedConversation.temperature ?? config.temperature,
+              });
+
+              const shouldApply = await runRuntimeTransitionPreflight(nextConfig, {
+                requireConfirm: true,
+                confirmLabel: 'Restore this saved runtime anyway?',
+              });
+              if (!shouldApply) {
+                console.log('\nRuntime restore cancelled.');
+                continue;
+              }
 
               rebuildRuntime(
-                updateConfig(config, {
-                  provider: restoredProvider,
-                  model: restoredModel,
-                  baseUrl: restoredBaseUrl,
-                  workdir: restoredWorkdir,
-                  autoApprove: loadedConversation.autoApprove ?? config.autoApprove,
-                  maxTurns: loadedConversation.maxTurns ?? config.maxTurns,
-                  temperature: loadedConversation.temperature ?? config.temperature,
-                }),
+                nextConfig,
                 true
               );
               await logSessionEvent(() => sessionStore.logConfig('resume runtime sync', config));
@@ -808,21 +844,32 @@ async function main(): Promise<void> {
             }
 
             const nextWorkdir = resolveValidatedWorkdir(profile.workdir);
-            const confirmed = await ui.confirm(renderProfileLoadPreview(config, profile));
+            const nextConfig = updateConfig(config, {
+              provider: profile.provider,
+              model: profile.model,
+              baseUrl: profile.baseUrl,
+              workdir: nextWorkdir,
+              autoApprove: profile.autoApprove,
+              maxTurns: profile.maxTurns,
+              temperature: profile.temperature,
+            });
+            const preflight = await buildRuntimeTransitionPreflight(nextConfig);
+            const confirmed = await ui.confirm(
+              [
+                renderProfileLoadPreview(config, profile),
+                preflight.status !== 'ready'
+                  ? renderRuntimeTransitionPreflight(nextConfig, preflight)
+                  : undefined,
+              ]
+                .filter(Boolean)
+                .join('\n\n')
+            );
             if (!confirmed) {
               console.log('\nProfile load cancelled.');
               continue;
             }
             rebuildRuntime(
-              updateConfig(config, {
-                provider: profile.provider,
-                model: profile.model,
-                baseUrl: profile.baseUrl,
-                workdir: nextWorkdir,
-                autoApprove: profile.autoApprove,
-                maxTurns: profile.maxTurns,
-                temperature: profile.temperature,
-              }),
+              nextConfig,
               true
             );
             sessionStore = await createSessionStore(config, launchCwd, `profile load: ${profile.name}`);
@@ -910,13 +957,16 @@ async function main(): Promise<void> {
         const nextModel = resolveStoredModelForProvider(provider, process.env, {
           allowLegacy: false,
         });
+        const nextConfig = updateConfig(config, {
+          provider,
+          baseUrl: nextBaseUrl,
+          model: nextModel,
+        });
+
+        await runRuntimeTransitionPreflight(nextConfig);
 
         rebuildRuntime(
-          updateConfig(config, {
-            provider,
-            baseUrl: nextBaseUrl,
-            model: nextModel,
-          }),
+          nextConfig,
           true
         );
         const updates: Record<string, string> = {
@@ -946,10 +996,13 @@ async function main(): Promise<void> {
           );
           continue;
         }
+        const nextConfig = updateConfig(config, {
+          model: nextModel,
+        });
+
+        await runRuntimeTransitionPreflight(nextConfig);
         rebuildRuntime(
-          updateConfig(config, {
-            model: nextModel,
-          }),
+          nextConfig,
           true
         );
         const saved = await persistLaunchSettings({
@@ -988,10 +1041,12 @@ async function main(): Promise<void> {
         }
 
         const nextBaseUrl = entry.slice('/base-url '.length).trim().replace(/\/+$/, '');
+        const nextConfig = updateConfig(config, {
+          baseUrl: nextBaseUrl,
+        });
+        await runRuntimeTransitionPreflight(nextConfig);
         rebuildRuntime(
-          updateConfig(config, {
-            baseUrl: nextBaseUrl,
-          }),
+          nextConfig,
           true
         );
         const currentBaseUrlKey = providerBaseUrlEnvKey(config.provider);

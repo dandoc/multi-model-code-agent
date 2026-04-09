@@ -1,4 +1,10 @@
-import { describeModelFamily, renderModelCatalogs, renderModelDiagnostics } from './providerModels.js';
+import {
+  buildRuntimeTransitionPreflight,
+  describeModelFamily,
+  renderModelCatalogs,
+  renderModelDiagnostics,
+  renderRuntimeTransitionPreflight,
+} from './providerModels.js';
 import { buildSystemPrompt } from './prompt.js';
 import { createTools } from './tools.js';
 import { diagnoseProviderFailure } from './modelAdapters.js';
@@ -214,6 +220,72 @@ async function main(): Promise<void> {
     codexFailure.summary.includes('시간 안에 끝나지 않았') &&
       codexFailure.nextSteps.some((step) => step.includes('/max-turns')),
     'Expected Codex timeouts to suggest narrowing the request or tuning runtime settings.'
+  );
+
+  const openAiPreflight = await buildRuntimeTransitionPreflight(
+    {
+      ...config,
+      provider: 'openai',
+      model: '',
+      baseUrl: '',
+      apiKey: undefined,
+    }
+  );
+  assert(
+    openAiPreflight.status === 'warning' &&
+      openAiPreflight.issues.some((issue) => issue.label === 'API key') &&
+      openAiPreflight.issues.some((issue) => issue.label === 'model selection'),
+    'Expected OpenAI runtime preflight to warn about missing API key and model selection.'
+  );
+
+  const ollamaPreflight = await buildRuntimeTransitionPreflight(
+    {
+      ...config,
+      provider: 'ollama',
+      model: 'qwen3-coder:30b',
+    },
+    {
+      probeOllama: async () => ({
+        available: true,
+        detail: 'The local `ollama list` command responded successfully.',
+        models: ['qwen2.5-coder:7b'],
+      }),
+    }
+  );
+  const ollamaPreflightText = renderRuntimeTransitionPreflight(
+    {
+      ...config,
+      provider: 'ollama',
+      model: 'qwen3-coder:30b',
+    },
+    ollamaPreflight
+  );
+  assert(
+    ollamaPreflight.status === 'warning' &&
+      ollamaPreflightText.includes('installed models') &&
+      ollamaPreflightText.includes('ollama pull qwen3-coder:30b'),
+    'Expected Ollama runtime preflight to warn when the selected model is not installed locally.'
+  );
+
+  const codexPreflight = await buildRuntimeTransitionPreflight(
+    {
+      ...config,
+      provider: 'codex',
+      model: 'gpt-5.4',
+      baseUrl: '',
+    },
+    {
+      probeCodex: async () => ({
+        available: true,
+        loggedIn: false,
+        detail: 'Run `codex login` first.',
+      }),
+    }
+  );
+  assert(
+    codexPreflight.status === 'warning' &&
+      codexPreflight.issues.some((issue) => issue.label === 'ChatGPT login'),
+    'Expected Codex runtime preflight to warn when the local CLI login is missing.'
   );
 
   console.log('[models-smoke] All model catalog checks passed.');

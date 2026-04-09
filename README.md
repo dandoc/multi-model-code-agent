@@ -221,6 +221,7 @@ Each REPL session now writes a small JSONL log so you can inspect recent activit
 - `/status` now also shows which saved profiles match the current runtime exactly
 - profiles do not store API keys; use `/api-key` separately if needed
 - `/profile` is a short alias for `/profiles`
+- runtime-changing commands now run a small readiness preflight first, so provider/model/profile/runtime switches can warn before the next request fails
 
 ## Good first prompts
 
@@ -309,6 +310,9 @@ Doctor behavior:
 - `openai` doctor checks base URL shape, whether an API key is configured, and whether `/models` is reachable
 - `codex` doctor checks Codex CLI availability and ChatGPT login status
 - runtime request failures are also classified by provider, so auth/model/base-url/login/time-out issues return clearer next steps instead of one generic error
+- provider/model/profile/runtime switches now run a readiness preflight before the new runtime is applied
+- `/provider`, `/model`, and `/base-url` print preflight warnings immediately when the next runtime looks risky
+- `/profiles load` and `/resume runtime` fold the same preflight into their preview/confirm flow before they reset the conversation
 
 Session tuning:
 
