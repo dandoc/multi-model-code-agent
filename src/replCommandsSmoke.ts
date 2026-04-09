@@ -6,6 +6,7 @@ import {
   parseModelsRequest,
   parsePositiveCount,
   parseProfilesRequest,
+  parseRequestTimeoutRequest,
   parseResumeRequest,
   parseSessionsRequest,
   parseTemperatureRequest,
@@ -376,6 +377,34 @@ async function main(): Promise<void> {
   assert(
     maxTurnsMissing.kind === 'invalid',
     'Expected bare /max-turns to be rejected.'
+  );
+
+  const requestTimeoutUpdate = parseRequestTimeoutRequest('/request-timeout 45');
+  assert(
+    requestTimeoutUpdate.kind === 'update' &&
+      requestTimeoutUpdate.value === 45_000 &&
+      requestTimeoutUpdate.usedDefault === false,
+    'Expected /request-timeout <seconds> to parse correctly.'
+  );
+
+  const requestTimeoutDefault = parseRequestTimeoutRequest('/request-timeout default');
+  assert(
+    requestTimeoutDefault.kind === 'update' &&
+      requestTimeoutDefault.value === 120_000 &&
+      requestTimeoutDefault.usedDefault === true,
+    'Expected /request-timeout default to reset to the default request timeout.'
+  );
+
+  const requestTimeoutInvalid = parseRequestTimeoutRequest('/request-timeout 2');
+  assert(
+    requestTimeoutInvalid.kind === 'invalid',
+    'Expected too-small /request-timeout input to be rejected.'
+  );
+
+  const requestTimeoutMissing = parseRequestTimeoutRequest('/request-timeout');
+  assert(
+    requestTimeoutMissing.kind === 'invalid',
+    'Expected bare /request-timeout to be rejected.'
   );
 
   console.log('[repl-smoke] All REPL command parsing checks passed.');

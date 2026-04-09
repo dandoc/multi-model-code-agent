@@ -1,5 +1,12 @@
 import type { ModelProvider } from './types.js';
-import { DEFAULT_MAX_TURNS, DEFAULT_TEMPERATURE, MAX_TEMPERATURE } from './config.js';
+import {
+  DEFAULT_MAX_TURNS,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  DEFAULT_TEMPERATURE,
+  MAX_REQUEST_TIMEOUT_SECONDS,
+  MAX_TEMPERATURE,
+  MIN_REQUEST_TIMEOUT_SECONDS,
+} from './config.js';
 
 export function isWholeNumberText(value: string | undefined): boolean {
   return typeof value === 'string' && /^\d+$/.test(value.trim());
@@ -612,6 +619,42 @@ export function parseMaxTurnsRequest(entry: string): RuntimeSettingRequest {
   return {
     kind: 'update',
     value: parsed,
+    usedDefault: false,
+  };
+}
+
+export function parseRequestTimeoutRequest(entry: string): RuntimeSettingRequest {
+  const rawValue = entry.slice('/request-timeout'.length).trim();
+  if (!rawValue) {
+    return {
+      kind: 'invalid',
+      reason: `Use /request-timeout <${MIN_REQUEST_TIMEOUT_SECONDS}-${MAX_REQUEST_TIMEOUT_SECONDS}|default> (seconds).`,
+    };
+  }
+
+  if (rawValue.toLowerCase() === 'default') {
+    return {
+      kind: 'update',
+      value: DEFAULT_REQUEST_TIMEOUT_MS,
+      usedDefault: true,
+    };
+  }
+
+  const parsed = Number(rawValue);
+  if (
+    !Number.isFinite(parsed) ||
+    parsed < MIN_REQUEST_TIMEOUT_SECONDS ||
+    parsed > MAX_REQUEST_TIMEOUT_SECONDS
+  ) {
+    return {
+      kind: 'invalid',
+      reason: `Use /request-timeout <${MIN_REQUEST_TIMEOUT_SECONDS}-${MAX_REQUEST_TIMEOUT_SECONDS}|default> (seconds).`,
+    };
+  }
+
+  return {
+    kind: 'update',
+    value: Math.round(parsed * 1000),
     usedDefault: false,
   };
 }

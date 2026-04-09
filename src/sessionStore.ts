@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { appendFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { DEFAULT_REQUEST_TIMEOUT_MS } from './config.js';
 import { getAgentHomeDir } from './storagePaths.js';
 import type { AgentConfig, ChatMessage, ChatRole } from './types.js';
 
@@ -13,6 +14,7 @@ type SessionConfigSnapshot = {
   autoApprove: boolean;
   maxTurns: number;
   temperature: number;
+  requestTimeoutMs?: number;
   apiKeySet: boolean;
 };
 
@@ -102,6 +104,7 @@ export type SessionConversationLoad = {
   autoApprove?: boolean;
   maxTurns?: number;
   temperature?: number;
+  requestTimeoutMs?: number;
   apiKeySet?: boolean;
   reason?: string;
   messages: ChatMessage[];
@@ -181,6 +184,7 @@ function isSessionConfigSnapshot(value: unknown): value is SessionConfigSnapshot
     isBoolean(value.autoApprove) &&
     typeof value.maxTurns === 'number' &&
     typeof value.temperature === 'number' &&
+    (value.requestTimeoutMs === undefined || typeof value.requestTimeoutMs === 'number') &&
     isBoolean(value.apiKeySet)
   );
 }
@@ -227,6 +231,7 @@ function sanitizeConfig(config: AgentConfig): SessionConfigSnapshot {
     autoApprove: config.autoApprove,
     maxTurns: config.maxTurns,
     temperature: config.temperature,
+    requestTimeoutMs: config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
     apiKeySet: Boolean(config.apiKey),
   };
 }
@@ -1249,6 +1254,7 @@ export async function loadSessionConversation(
     autoApprove: effectiveConfig?.autoApprove,
     maxTurns: effectiveConfig?.maxTurns,
     temperature: effectiveConfig?.temperature,
+    requestTimeoutMs: effectiveConfig?.requestTimeoutMs,
     apiKeySet: effectiveConfig?.apiKeySet,
     reason:
       startedEvent && startedEvent.type === 'session_started'
@@ -1351,7 +1357,7 @@ export function renderRuntimeStatus(
     `Runtime: provider=${currentConfig.provider}, model=${
       currentConfig.model || '(provider default)'
     }, baseUrl=${baseUrl}, workdir=${currentConfig.workdir}`,
-    `Flags: autoApprove=${currentConfig.autoApprove}, maxTurns=${currentConfig.maxTurns}, temperature=${currentConfig.temperature}`,
+    `Flags: autoApprove=${currentConfig.autoApprove}, maxTurns=${currentConfig.maxTurns}, temperature=${currentConfig.temperature}, requestTimeout=${Math.round((currentConfig.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) / 1000)}s`,
     `Resume source: ${resumeSourceSessionId ?? '(none)'}`,
     `Saved activity: user=${loadedConversation.userMessages}, assistant=${loadedConversation.assistantMessages}, repl commands=${loadedConversation.replCommands}, config=${loadedConversation.configChanges}, profile=${loadedConversation.profile}`,
     `Saved conversation messages: ${loadedConversation.totalMessages}`,

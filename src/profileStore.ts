@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { DEFAULT_REQUEST_TIMEOUT_MS } from './config.js';
 import { getAgentHomeDir } from './storagePaths.js';
 import type { AgentConfig } from './types.js';
 
@@ -14,6 +15,7 @@ export type SavedProfile = {
   autoApprove: boolean;
   maxTurns: number;
   temperature: number;
+  requestTimeoutMs?: number;
   updatedAt: string;
 };
 
@@ -51,8 +53,13 @@ function isSavedProfile(value: unknown): value is SavedProfile {
     typeof value.autoApprove === 'boolean' &&
     typeof value.maxTurns === 'number' &&
     typeof value.temperature === 'number' &&
+    (value.requestTimeoutMs === undefined || typeof value.requestTimeoutMs === 'number') &&
     typeof value.updatedAt === 'string'
   );
+}
+
+function resolveProfileRequestTimeoutMs(profile: SavedProfile): number {
+  return profile.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
 }
 
 function normalizeProfileName(name: string): string {
@@ -81,7 +88,8 @@ function matchesCurrentProfile(profile: SavedProfile, config: AgentConfig): bool
     profile.workdir === config.workdir &&
     profile.autoApprove === config.autoApprove &&
     profile.maxTurns === config.maxTurns &&
-    profile.temperature === config.temperature
+    profile.temperature === config.temperature &&
+    resolveProfileRequestTimeoutMs(profile) === (config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS)
   );
 }
 
@@ -101,6 +109,7 @@ function matchesProfileSearch(profile: SavedProfile, query: string): boolean {
     profile.model,
     profile.baseUrl,
     profile.workdir,
+    `${Math.round(resolveProfileRequestTimeoutMs(profile) / 1000)}s`,
   ].some((value) => value.toLowerCase().includes(normalized));
 }
 
@@ -116,6 +125,7 @@ function findProfileSearchMatch(profile: SavedProfile, query: string): string | 
     ['model', profile.model || '(provider default)'],
     ['base URL', profile.baseUrl],
     ['workdir', profile.workdir],
+    ['request timeout', `${Math.round(resolveProfileRequestTimeoutMs(profile) / 1000)}s`],
   ];
 
   const found = candidates.find(([, value]) => value.toLowerCase().includes(normalized));
@@ -188,6 +198,13 @@ function collectProfileDiff(currentConfig: AgentConfig, profile: SavedProfile): 
       label: 'temperature',
       current: String(currentConfig.temperature),
       saved: String(profile.temperature),
+    });
+  }
+  if ((currentConfig.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) !== resolveProfileRequestTimeoutMs(profile)) {
+    fields.push({
+      label: 'requestTimeout',
+      current: `${Math.round((currentConfig.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) / 1000)}s`,
+      saved: `${Math.round(resolveProfileRequestTimeoutMs(profile) / 1000)}s`,
     });
   }
 
@@ -287,6 +304,7 @@ export async function saveProfile(name: string, config: AgentConfig): Promise<Sa
     autoApprove: config.autoApprove,
     maxTurns: config.maxTurns,
     temperature: config.temperature,
+    requestTimeoutMs: config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
     updatedAt: new Date().toISOString(),
   };
 
@@ -432,7 +450,7 @@ export async function renderProfileList(
       `  provider=${profile.provider}, model=${profile.model || '(provider default)'}, workdir=${profile.workdir}`
     );
     lines.push(
-      `  flags: autoApprove=${profile.autoApprove}, maxTurns=${profile.maxTurns}, temperature=${profile.temperature}`
+      `  flags: autoApprove=${profile.autoApprove}, maxTurns=${profile.maxTurns}, temperature=${profile.temperature}, requestTimeout=${Math.round(resolveProfileRequestTimeoutMs(profile) / 1000)}s`
     );
     const matchLine = options.query ? findProfileSearchMatch(profile, options.query) : undefined;
     if (matchLine) {

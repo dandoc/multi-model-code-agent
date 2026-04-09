@@ -656,11 +656,13 @@ Summary:
 - `/models ... search <query>` now filters provider model lists and shows short family hints for common model families
 - `/models ... doctor` now diagnoses provider readiness and common setup failures for Ollama, OpenAI-compatible endpoints, and Codex CLI
 - `/temperature` and `/max-turns` now tune the current session runtime without restarting or persisting to `.env`
+- `/request-timeout` now tunes the current session request timeout without restarting or persisting to `.env`
 - the system prompt now injects provider/model-specific operating guidance so Qwen, Gemma, Codex, and OpenAI-compatible paths get different grounding and failure-handling hints
 - runtime request failures are now classified by provider so Ollama/OpenAI-compatible/Codex errors return provider-specific causes and next steps
 - Ollama/OpenAI-compatible chat requests now retry once on transient timeout/network/429/5xx failures, with adapter smoke coverage for retry vs non-retry paths
 - provider/model/base-url switches now run a quick runtime preflight and surface readiness warnings before resetting the conversation
 - `/profiles load` and `/resume runtime` now include the same preflight in their preview/confirm flow, so missing keys, missing local models, or missing Codex login show up before the runtime is applied
+- saved profiles and runtime-aware resume now preserve the effective request-timeout setting as part of the runtime snapshot
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:

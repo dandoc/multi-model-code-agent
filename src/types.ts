@@ -16,6 +16,7 @@ export interface AgentConfig {
   autoApprove: boolean;
   maxTurns: number;
   temperature: number;
+  requestTimeoutMs?: number;
 }
 
 export type ToolName =

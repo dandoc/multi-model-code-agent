@@ -36,6 +36,7 @@ async function main(): Promise<void> {
       autoApprove: false,
       maxTurns: 8,
       temperature: 0.2,
+      requestTimeoutMs: 120_000,
     });
 
     if (saved.name !== 'local-qwen') {
@@ -55,6 +56,7 @@ async function main(): Promise<void> {
       autoApprove: true,
       maxTurns: 42,
       temperature: 0.7,
+      requestTimeoutMs: 240_000,
     });
 
     const listed = await listProfiles();
@@ -79,6 +81,9 @@ async function main(): Promise<void> {
     }
     if (!rendered.includes('provider=codex, model=gpt-5.4')) {
       throw new Error('Rendered profile list is missing the codex profile summary.');
+    }
+    if (!rendered.includes('requestTimeout=240s')) {
+      throw new Error('Rendered profile list should show the saved request timeout in seconds.');
     }
     const matches = await findMatchingProfiles({
       provider: 'ollama',
@@ -176,6 +181,22 @@ async function main(): Promise<void> {
       !loadPreviewChanged.includes('Loading a profile resets the current conversation.')
     ) {
       throw new Error('Profile load preview should list changed fields before confirmation.');
+    }
+    const timeoutDiff = renderProfileDiff(
+      {
+        provider: 'ollama',
+        model: 'qwen3-coder:30b',
+        baseUrl: 'http://127.0.0.1:11434',
+        workdir: workdirA,
+        autoApprove: false,
+        maxTurns: 8,
+        temperature: 0.2,
+        requestTimeoutMs: 300_000,
+      },
+      saved
+    );
+    if (!timeoutDiff.includes('- requestTimeout: 300s -> 120s')) {
+      throw new Error('Profile diff should surface request-timeout changes.');
     }
     const noMatchLine = await renderMatchingProfilesLine({
       provider: 'ollama',

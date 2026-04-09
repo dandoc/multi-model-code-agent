@@ -256,6 +256,7 @@ async function main(): Promise<void> {
         `Path: ${store.sessionPath}`,
         'Title: Current session custom title',
         `Runtime: provider=ollama, model=qwen2.5-coder:14b, baseUrl=http://127.0.0.1:11434, workdir=${workdir}`,
+        'requestTimeout=120s',
         'Resume source: (none)',
         'Saved activity: user=1, assistant=1, repl commands=1, config=1, profile=mixed',
         'Saved conversation messages: 2',
@@ -572,6 +573,7 @@ async function main(): Promise<void> {
         `Session id: ${previousStore.sessionId}`,
         `Path: ${previousStore.sessionPath}`,
         'Title: Show me the earlier session.',
+        'requestTimeout=120s',
         `Resume source: ${previousStore.sessionId}`,
         'Saved activity: user=1, assistant=1, repl commands=0, config=0, profile=light',
       ],
@@ -594,6 +596,7 @@ async function main(): Promise<void> {
         autoApprove: false,
         maxTurns: 8,
         temperature: 0.2,
+        requestTimeoutMs: 120_000,
       },
       runtimeResumeWorkdirA,
       'runtime resume smoke'
@@ -606,6 +609,7 @@ async function main(): Promise<void> {
       autoApprove: true,
       maxTurns: 42,
       temperature: 1.1,
+      requestTimeoutMs: 240_000,
     });
     await runtimeResumeStore.logMessage('user', 'Resume the updated runtime.');
     await runtimeResumeStore.logMessage('assistant', 'Updated runtime is ready.');
@@ -639,6 +643,11 @@ async function main(): Promise<void> {
         `Expected runtime resume temperature to reflect the latest config event, got ${runtimeResumedConversation.temperature}.`
       );
     }
+    if (runtimeResumedConversation.requestTimeoutMs !== 240_000) {
+      throw new Error(
+        `Expected runtime resume requestTimeoutMs to reflect the latest config event, got ${runtimeResumedConversation.requestTimeoutMs}.`
+      );
+    }
     assertIncludesAll(
       renderResumeContext(
         runtimeResumedConversation,
@@ -650,6 +659,7 @@ async function main(): Promise<void> {
           autoApprove: true,
           maxTurns: 42,
           temperature: 1.1,
+          requestTimeoutMs: 240_000,
         },
         { runtimeApplied: true }
       ),

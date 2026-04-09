@@ -5,6 +5,7 @@ import { stdin as input, stdout as output } from 'node:process';
 import { AgentRunner } from './agent.js';
 import {
   DEFAULT_MAX_TURNS,
+  DEFAULT_REQUEST_TIMEOUT_MS,
   createConfigFromInputs,
   providerDefaultBaseUrl,
   providerDefaultModel,
@@ -55,6 +56,7 @@ import {
   parseMaxTurnsRequest,
   parseModelsRequest,
   parseProfilesRequest,
+  parseRequestTimeoutRequest,
   parseResumeRequest,
   parseSessionsRequest,
   parseTemperatureRequest,
@@ -84,6 +86,7 @@ function printStartupHelp(): void {
       '  --auto-approve',
       '  --max-turns <number>',
       '  --temperature <number>',
+      '  --request-timeout-ms <number>',
       '  --prompt "one shot prompt"',
       '  --help',
     ].join('\n')
@@ -152,6 +155,8 @@ function printReplHelp(): void {
       '  /workdir <path>       Change workdir',
       '  /temperature <value>  Set temperature for this session (0-1.5 or default)',
       `  /max-turns <value>    Set max turns for this session (1-100 or default=${DEFAULT_MAX_TURNS})`,
+      '  /request-timeout <seconds>',
+      `                       Set request timeout for this session (${Math.round(DEFAULT_REQUEST_TIMEOUT_MS / 1000)}s default)`,
       '  /approve on|off       Toggle auto approval',
       '  /quit                 Exit',
       '',
@@ -512,6 +517,7 @@ async function main(): Promise<void> {
                 autoApprove: loadedConversation.autoApprove ?? config.autoApprove,
                 maxTurns: loadedConversation.maxTurns ?? config.maxTurns,
                 temperature: loadedConversation.temperature ?? config.temperature,
+                requestTimeoutMs: loadedConversation.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
               });
 
               const shouldApply = await runRuntimeTransitionPreflight(nextConfig, {
@@ -852,6 +858,7 @@ async function main(): Promise<void> {
               autoApprove: profile.autoApprove,
               maxTurns: profile.maxTurns,
               temperature: profile.temperature,
+              requestTimeoutMs: profile.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
             });
             const preflight = await buildRuntimeTransitionPreflight(nextConfig);
             const confirmed = await ui.confirm(
@@ -958,10 +965,11 @@ async function main(): Promise<void> {
           allowLegacy: false,
         });
         const nextConfig = updateConfig(config, {
-          provider,
-          baseUrl: nextBaseUrl,
-          model: nextModel,
-        });
+            provider,
+            baseUrl: nextBaseUrl,
+            model: nextModel,
+            requestTimeoutMs: config.requestTimeoutMs,
+          });
 
         await runRuntimeTransitionPreflight(nextConfig);
 
@@ -998,6 +1006,7 @@ async function main(): Promise<void> {
         }
         const nextConfig = updateConfig(config, {
           model: nextModel,
+          requestTimeoutMs: config.requestTimeoutMs,
         });
 
         await runRuntimeTransitionPreflight(nextConfig);
@@ -1043,6 +1052,7 @@ async function main(): Promise<void> {
         const nextBaseUrl = entry.slice('/base-url '.length).trim().replace(/\/+$/, '');
         const nextConfig = updateConfig(config, {
           baseUrl: nextBaseUrl,
+          requestTimeoutMs: config.requestTimeoutMs,
         });
         await runRuntimeTransitionPreflight(nextConfig);
         rebuildRuntime(
@@ -1139,6 +1149,29 @@ async function main(): Promise<void> {
           request.usedDefault
             ? `\nMax turns reset to ${config.maxTurns} for this session.`
             : `\nMax turns is now ${config.maxTurns} for this session.`
+        );
+        continue;
+      }
+
+      if (entry === '/request-timeout' || entry.startsWith('/request-timeout ')) {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
+        const request = parseRequestTimeoutRequest(entry);
+        if (request.kind === 'invalid') {
+          console.log(`\n${request.reason}`);
+          continue;
+        }
+
+        rebuildRuntime(
+          updateConfig(config, {
+            requestTimeoutMs: request.value,
+          }),
+          false
+        );
+        await logSessionEvent(() => sessionStore.logConfig('request-timeout update', config));
+        console.log(
+          request.usedDefault
+            ? `\nRequest timeout reset to ${Math.round((config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) / 1000)}s for this session.`
+            : `\nRequest timeout is now ${Math.round((config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) / 1000)}s for this session.`
         );
         continue;
       }

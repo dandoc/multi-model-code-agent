@@ -146,6 +146,7 @@ npm run dev
 - `/workdir <path>`
 - `/temperature <value|default>`
 - `/max-turns <value|default>`
+- `/request-timeout <seconds|default>`
 - `/approve on|off`
 - `/quit`
 
@@ -222,6 +223,7 @@ Each REPL session now writes a small JSONL log so you can inspect recent activit
 - profiles do not store API keys; use `/api-key` separately if needed
 - `/profile` is a short alias for `/profiles`
 - runtime-changing commands now run a small readiness preflight first, so provider/model/profile/runtime switches can warn before the next request fails
+- saved profiles now also preserve the request timeout for slow local or remote model paths
 
 ## Good first prompts
 
@@ -318,6 +320,7 @@ Session tuning:
 
 - `/temperature <value|default>` updates the current session sampling temperature without rewriting `.env`
 - `/max-turns <value|default>` updates the current session turn budget without restarting the REPL
+- `/request-timeout <seconds|default>` updates the current session request timeout for slow providers without rewriting `.env`
 - these settings are included if you later save the current runtime as a profile
 
 Model-specific prompt tuning:

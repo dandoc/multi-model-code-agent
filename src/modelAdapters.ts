@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 
+import { DEFAULT_REQUEST_TIMEOUT_MS } from './config.js';
 import type { AgentConfig, ChatMessage, ModelAdapter } from './types.js';
 
 type ProviderFailureDiagnosis = {
@@ -56,8 +57,6 @@ interface CodexExecEvent {
 }
 
 const CODEX_LOGIN_TIMEOUT_MS = 15_000;
-const CODEX_REQUEST_TIMEOUT_MS = 120_000;
-const CODEX_RETRY_TIMEOUT_MS = 180_000;
 const PROVIDER_RETRY_DELAY_MS = 350;
 
 function sleep(ms: number): Promise<void> {
@@ -118,6 +117,14 @@ async function retryProviderRequest<T>(
 
 function getCodexCommand(): string {
   return 'codex';
+}
+
+function getRequestTimeoutMs(config: AgentConfig): number {
+  return config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+}
+
+function getCodexRetryTimeoutMs(config: AgentConfig): number {
+  return Math.max(getRequestTimeoutMs(config) + 60_000, Math.round(getRequestTimeoutMs(config) * 1.5));
 }
 
 function getCodexEnv(): NodeJS.ProcessEnv {
@@ -474,6 +481,7 @@ function diagnoseCodexFailure(message: string, config: AgentConfig): ProviderFai
       nextSteps: [
         '질문 범위를 더 좁혀 보세요.',
         '더 빠른 모델로 바꾸거나 `/max-turns`를 줄여 보세요.',
+        '느린 모델이라면 `/request-timeout`을 늘려 보세요.',
       ],
       detail: message,
     };
@@ -538,7 +546,7 @@ class OllamaAdapter implements ModelAdapter {
               temperature: config.temperature,
             },
           }),
-          signal: AbortSignal.timeout(120_000),
+          signal: AbortSignal.timeout(getRequestTimeoutMs(config)),
         }),
       (candidate) => !candidate.ok && isRetryableHttpStatus(candidate.status)
     );
@@ -578,7 +586,7 @@ class OpenAICompatibleAdapter implements ModelAdapter {
             temperature: config.temperature,
             messages,
           }),
-          signal: AbortSignal.timeout(120_000),
+          signal: AbortSignal.timeout(getRequestTimeoutMs(config)),
         }),
       (candidate) => !candidate.ok && isRetryableHttpStatus(candidate.status)
     );
@@ -631,14 +639,14 @@ class CodexCliAdapter implements ModelAdapter {
     let result: { code: number | null; stdout: string; stderr: string };
 
     try {
-      result = await runCodexCommand(args, prompt, config, CODEX_REQUEST_TIMEOUT_MS);
+      result = await runCodexCommand(args, prompt, config, getRequestTimeoutMs(config));
     } catch (error) {
       if (!isCodexTimeoutError(error)) {
         throw error;
       }
 
       try {
-        result = await runCodexCommand(args, prompt, config, CODEX_RETRY_TIMEOUT_MS);
+        result = await runCodexCommand(args, prompt, config, getCodexRetryTimeoutMs(config));
       } catch (retryError) {
         if (isCodexTimeoutError(retryError)) {
           throw new Error(

@@ -12,6 +12,9 @@ import type { AgentConfig, ModelProvider, ParsedCliInput } from './types.js';
 export const DEFAULT_MAX_TURNS = 8;
 export const DEFAULT_TEMPERATURE = 0.2;
 export const MAX_TEMPERATURE = 1.5;
+export const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+export const MIN_REQUEST_TIMEOUT_SECONDS = 5;
+export const MAX_REQUEST_TIMEOUT_SECONDS = 600;
 
 type ArgValue = string | boolean;
 
@@ -162,6 +165,18 @@ export function createConfigFromInputs(argv: string[]): ParsedCliInput {
         parseNumber(parsed.flags.temperature ?? process.env.AGENT_TEMPERATURE, DEFAULT_TEMPERATURE)
       )
     ),
+    requestTimeoutMs: Math.max(
+      MIN_REQUEST_TIMEOUT_SECONDS * 1000,
+      Math.min(
+        MAX_REQUEST_TIMEOUT_SECONDS * 1000,
+        Math.floor(
+          parseNumber(
+            parsed.flags['request-timeout-ms'] ?? process.env.AGENT_REQUEST_TIMEOUT_MS,
+            DEFAULT_REQUEST_TIMEOUT_MS
+          )
+        )
+      )
+    ),
   };
 
   return {
@@ -180,6 +195,7 @@ export function renderConfigSummary(config: AgentConfig): string {
     `autoApprove  ${config.autoApprove}`,
     `maxTurns     ${config.maxTurns}`,
     `temperature  ${config.temperature}`,
+    `requestTimeout  ${Math.round((config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) / 1000)}s`,
   ];
 
   if (config.provider === 'openai') {
