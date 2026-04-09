@@ -170,6 +170,7 @@ Each REPL session now writes a small JSONL log so you can inspect recent activit
 - use `/sessions summary current` to get a focused summary of the current saved session
 - use `/sessions summary latest` or `/sessions summary <session-id>` to inspect one saved session before resuming it
 - use `/sessions search <query>` or `/sessions find <query>` to filter saved sessions by title, provider, model, workdir, or reason
+- `/sessions search` now also matches saved user/assistant text and shows a short `match:` preview line
 - `/session` is a short alias for `/sessions`
 - `/sessions` now shows a short title from the first saved user prompt and the last activity time, so similar sessions are easier to tell apart
 - use `/history latest` to inspect the most recent earlier session

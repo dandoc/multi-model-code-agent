@@ -580,3 +580,17 @@ Validation:
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke:sessions`
+
+### 2026-04-09 - Session search previews
+
+Summary:
+
+- expanded `/sessions search` so it matches not only titles and runtime metadata but also saved user/assistant messages and the last meaningful command
+- added a `match:` preview line to filtered session results, so it is obvious why a session matched and easier to choose the right one to inspect or resume
+- added session smoke coverage for assistant-message content search, so search stays useful even when the title itself does not contain the query
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:sessions`

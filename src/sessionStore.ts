@@ -57,6 +57,10 @@ export type SessionListEntry = {
   startedAt: string;
   lastActivityAt: string;
   title: string;
+  firstRequest?: string;
+  lastUserMessage?: string;
+  lastAssistantReply?: string;
+  lastMeaningfulCommand?: string;
   workdir: string;
   provider: AgentConfig['provider'];
   model: string;
@@ -112,6 +116,11 @@ type SessionScanResult = {
 type SessionListOptions = {
   currentSessionId?: string;
   query?: string;
+};
+
+type SessionSearchMatch = {
+  label: string;
+  snippet: string;
 };
 
 type SessionActivitySummary = {
@@ -394,6 +403,11 @@ async function loadSessionEntry(sessionPath: string): Promise<SessionEntryLoad> 
     };
   }
 
+  const firstUserMessage = findFirstMeaningfulUserMessage(loaded.events);
+  const lastUserMessage = findLastUserMessage(loaded.events);
+  const lastAssistantMessage = findLastAssistantMessage(loaded.events);
+  const lastMeaningfulCommand = findLastMeaningfulCommand(loaded.events);
+
   return {
     entry: {
       sessionId: startedEvent.sessionId,
@@ -401,6 +415,10 @@ async function loadSessionEntry(sessionPath: string): Promise<SessionEntryLoad> 
       startedAt: startedEvent.timestamp,
       lastActivityAt: loaded.events.at(-1)?.timestamp ?? startedEvent.timestamp,
       title: deriveSessionTitle(loaded.events, startedEvent.reason),
+      firstRequest: firstUserMessage?.content,
+      lastUserMessage: lastUserMessage?.content,
+      lastAssistantReply: lastAssistantMessage?.content,
+      lastMeaningfulCommand: lastMeaningfulCommand?.command,
       workdir: startedEvent.config.workdir,
       provider: startedEvent.config.provider,
       model: startedEvent.config.model,
@@ -529,6 +547,10 @@ function matchesSessionSearch(entry: SessionListEntry, query: string): boolean {
   const haystack = [
     entry.sessionId,
     entry.title,
+    entry.firstRequest ?? '',
+    entry.lastUserMessage ?? '',
+    entry.lastAssistantReply ?? '',
+    entry.lastMeaningfulCommand ?? '',
     entry.provider,
     entry.model,
     entry.workdir,
@@ -538,6 +560,40 @@ function matchesSessionSearch(entry: SessionListEntry, query: string): boolean {
     .toLowerCase();
 
   return haystack.includes(normalizedQuery);
+}
+
+function findSessionSearchMatch(entry: SessionListEntry, query: string): SessionSearchMatch | null {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return null;
+  }
+
+  const candidates: Array<{ label: string; value?: string }> = [
+    { label: 'title', value: entry.title },
+    { label: 'first request', value: entry.firstRequest },
+    { label: 'last user', value: entry.lastUserMessage },
+    { label: 'last assistant', value: entry.lastAssistantReply },
+    { label: 'last command', value: entry.lastMeaningfulCommand },
+    { label: 'provider', value: entry.provider },
+    { label: 'model', value: entry.model },
+    { label: 'workdir', value: entry.workdir },
+    { label: 'reason', value: entry.reason },
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate.value) {
+      continue;
+    }
+
+    if (candidate.value.toLowerCase().includes(normalizedQuery)) {
+      return {
+        label: candidate.label,
+        snippet: truncateInline(candidate.value, 120),
+      };
+    }
+  }
+
+  return null;
 }
 
 function summarizeSessionActivity(events: SessionEvent[]): SessionActivitySummary {
@@ -734,6 +790,12 @@ export async function renderSessionList(limit = 8, options: SessionListOptions =
     lines.push(
       `  provider=${entry.provider}, model=${entry.model || '(provider default)'}, workdir=${entry.workdir}, reason=${entry.reason}`
     );
+    if (query) {
+      const match = findSessionSearchMatch(entry, query);
+      if (match) {
+        lines.push(`  match: ${match.label} -> ${match.snippet}`);
+      }
+    }
     lines.push('');
   }
 

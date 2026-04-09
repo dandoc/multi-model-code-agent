@@ -276,6 +276,24 @@ async function main(): Promise<void> {
       throw new Error('Filtered session list should not include non-matching sessions.');
     }
 
+    const assistantFilteredSessionList = await renderSessionList(10, {
+      currentSessionId: store.sessionId,
+      query: 'session smoke test reply',
+    });
+    assertIncludesAll(
+      assistantFilteredSessionList,
+      [
+        'Saved sessions (1)',
+        'Filter: session smoke test reply',
+        `- id: ${store.sessionId} (current)`,
+        '  match: last assistant -> This is a session smoke test reply.',
+      ],
+      'assistant-content filtered session list'
+    );
+    if (assistantFilteredSessionList.includes(previousStore.sessionId)) {
+      throw new Error('Assistant-content filtered session list should not include unrelated sessions.');
+    }
+
     const comparison = await renderSessionComparison(5, store.sessionId);
     assertIncludesAll(
       comparison,
