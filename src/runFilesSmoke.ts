@@ -61,7 +61,7 @@ async function main(): Promise<void> {
     if (!matched.ok) {
       throw new Error(`run_files directory smoke failed:\n${matched.output}`);
     }
-    assertIncludes(matched.summary, 'successfully', 'directory smoke summary');
+    assertIncludes(matched.summary, 'run_files SUCCESS:', 'directory smoke summary');
     assertIncludes(matched.output, 'PATH: test/hello.js', 'directory smoke path');
     assertIncludes(matched.output, 'Hello Run Files!', 'directory smoke stdout');
 
@@ -76,7 +76,7 @@ async function main(): Promise<void> {
     if (unsupported.ok) {
       throw new Error(`run_files unsupported-file smoke unexpectedly succeeded:\n${unsupported.output}`);
     }
-    assertIncludes(unsupported.summary, '1 failure', 'unsupported summary');
+    assertIncludes(unsupported.summary, 'run_files FAILED:', 'unsupported summary');
     assertIncludes(unsupported.output, 'Unsupported file type', 'unsupported reason');
 
     console.log('[run-files-smoke] All run_files checks passed.');

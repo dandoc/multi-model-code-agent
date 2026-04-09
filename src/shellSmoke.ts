@@ -52,7 +52,7 @@ async function main(): Promise<void> {
     if (!defaultResult.ok) {
       throw new Error(`Default shell smoke failed:\n${defaultResult.output}`);
     }
-    assertIncludes(defaultResult.summary, 'default', 'default shell summary');
+    assertIncludes(defaultResult.summary, 'run_shell SUCCESS:', 'default shell summary');
     assertIncludes(defaultResult.output, 'SHELL: default', 'default shell output');
     assertIncludes(defaultResult.output, 'default-shell-ok', 'default shell stdout');
 
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
       if (!cmdResult.ok) {
         throw new Error(`cmd shell smoke failed:\n${cmdResult.output}`);
       }
-      assertIncludes(cmdResult.summary, 'cmd', 'cmd shell summary');
+      assertIncludes(cmdResult.summary, 'run_shell SUCCESS:', 'cmd shell summary');
       assertIncludes(cmdResult.output, 'SHELL: cmd', 'cmd shell output');
       assertIncludes(cmdResult.output, 'cmd-shell-ok', 'cmd shell stdout');
 
@@ -84,7 +84,7 @@ async function main(): Promise<void> {
       }
       assertIncludes(
         fallbackResult.summary,
-        'after fallback to powershell',
+        'run_shell SUCCESS:',
         'powershell fallback summary'
       );
       assertIncludes(
@@ -110,7 +110,7 @@ async function main(): Promise<void> {
     if (!powerShellResult.ok) {
       throw new Error(`powershell shell smoke failed:\n${powerShellResult.output}`);
     }
-    assertIncludes(powerShellResult.summary, 'powershell', 'powershell summary');
+    assertIncludes(powerShellResult.summary, 'run_shell SUCCESS:', 'powershell summary');
     assertIncludes(powerShellResult.output, 'SHELL: powershell', 'powershell output');
     assertIncludes(powerShellResult.output, 'powershell-shell-ok', 'powershell stdout');
 

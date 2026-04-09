@@ -354,6 +354,18 @@ function buildRunFilesSection(title: string, content: string): string {
   return `${title}:\n${content || '(empty)'}`;
 }
 
+function formatOutcomeLabel(ok: boolean): string {
+  return ok ? 'SUCCESS' : 'FAILED';
+}
+
+function buildToolOutcomeSummary(
+  toolName: 'run_shell' | 'run_files',
+  ok: boolean,
+  detail: string
+): string {
+  return `${toolName} ${formatOutcomeLabel(ok)}: ${detail}`;
+}
+
 function normalizeRunFilesPath(workdir: string, absolutePath: string): string {
   return normalizeDisplayPath(relativeToRoot(workdir, absolutePath));
 }
@@ -1452,8 +1464,16 @@ async function runFiles(args: Record<string, unknown>, context: ToolContext): Pr
     ok: failureCount === 0,
     summary:
       failureCount === 0
-        ? `Ran or launched ${successCount} file${successCount === 1 ? '' : 's'} successfully.`
-        : `Ran ${results.length} file${results.length === 1 ? '' : 's'} with ${failureCount} failure${failureCount === 1 ? '' : 's'}.`,
+        ? buildToolOutcomeSummary(
+            'run_files',
+            true,
+            `${successCount} file${successCount === 1 ? '' : 's'} completed`
+          )
+        : buildToolOutcomeSummary(
+            'run_files',
+            false,
+            `${failureCount} of ${results.length} file${results.length === 1 ? '' : 's'} failed`
+          ),
     output: renderRunFilesResult(results),
     metadata: {
       paths: results.map((result) => result.path),
@@ -1616,7 +1636,7 @@ async function runShell(args: Record<string, unknown>, context: ToolContext): Pr
 
     return {
       ok: true,
-      summary: `Command completed successfully in ${shellLabel}: ${command}`,
+      summary: buildToolOutcomeSummary('run_shell', true, `${shellLabel} | ${command}`),
       output: truncate(output),
       metadata: {
         command,
@@ -1657,7 +1677,11 @@ async function runShell(args: Record<string, unknown>, context: ToolContext): Pr
 
         return {
           ok: true,
-          summary: `Command completed successfully after fallback to ${fallbackLabel}: ${command}`,
+          summary: buildToolOutcomeSummary(
+            'run_shell',
+            true,
+            `${shellLabel} -> ${fallbackLabel} | ${command}`
+          ),
           output: truncate(output),
           metadata: {
             command,
@@ -1681,7 +1705,11 @@ async function runShell(args: Record<string, unknown>, context: ToolContext): Pr
 
         return {
           ok: false,
-          summary: `Command failed in ${shellLabel} and ${fallbackLabel}: ${command}`,
+          summary: buildToolOutcomeSummary(
+            'run_shell',
+            false,
+            `${shellLabel} + ${fallbackLabel} | ${command}`
+          ),
           output: truncate(output),
           metadata: {
             command,
@@ -1698,7 +1726,7 @@ async function runShell(args: Record<string, unknown>, context: ToolContext): Pr
 
     return {
       ok: false,
-      summary: `Command failed in ${shellLabel}: ${command}`,
+      summary: buildToolOutcomeSummary('run_shell', false, `${shellLabel} | ${command}`),
       output: truncate(renderShellFailure(shellLabel, shellError)),
       metadata: {
         command,

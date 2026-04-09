@@ -155,6 +155,11 @@ npm run dev
 
 If you mistype a slash command, the REPL now suggests the closest known command and a matching help topic when possible.
 
+Recent CLI output polish:
+
+- tool summaries now use a more consistent `tool_name SUCCESS:` / `tool_name FAILED:` style
+- `run_shell` and `run_files` results keep the detailed body output, but the first summary line is shorter and easier to scan
+
 ## Smoke test
 
 Run the smoke test to check the minimum healthy path for the project:
