@@ -710,6 +710,32 @@ export class AgentRunner {
     );
   }
 
+  private isProtocolFormatQuestion(userInput: string): boolean {
+    return /(?:tool[_ ]?call|function[_ ]?call|tool[_ ]?calls|json|jsonc|protocol|schema|format|envelope|형식|포맷|프로토콜)/i.test(
+      userInput
+    );
+  }
+
+  private looksLikeMalformedStructuredResponse(rawResponse: string): boolean {
+    const cleaned = rawResponse.trim();
+    if (!cleaned) {
+      return false;
+    }
+
+    const startsWithStructuredPayload =
+      cleaned.startsWith('{') || cleaned.startsWith('[') || cleaned.startsWith('```');
+    const startsWithStructuredPreamble =
+      /^(?:here(?:'s| is)\s+(?:the\s+)?(?:json|tool[_ ]?call|function[_ ]?call)|tool[_ ]?call\s*:|function[_ ]?call\s*:)/i.test(
+        cleaned
+      );
+    const hasStructuredMarkers =
+      /"type"\s*:\s*"tool_call"|"tool"\s*:|"arguments"\s*:|"function_call"\s*:|"tool_calls"\s*:/.test(
+        cleaned
+      ) || /(?:tool[_ ]?call|function[_ ]?call|tool[_ ]?calls)/i.test(cleaned);
+
+    return hasStructuredMarkers && (startsWithStructuredPayload || startsWithStructuredPreamble);
+  }
+
   private buildCreationToolUseRetryInstruction(): string {
     return [
       'You have not created any files yet.',
@@ -725,6 +751,16 @@ export class AgentRunner {
       'If you need a tool, return a valid JSON tool_call.',
       'If you are ready to answer, return a JSON message with a non-empty plain-language answer.',
       'Do not return placeholders like empty strings, empty code blocks, or just "...".',
+      'Base your answer only on real tool outputs already provided.',
+    ].join('\n');
+  }
+
+  private buildMalformedStructuredResponseRetryInstruction(): string {
+    return [
+      'Your previous response looked like a malformed structured payload.',
+      'If you need a tool, return one valid JSON tool_call object only.',
+      'If you are ready to answer, return one valid JSON message object only.',
+      'Do not mix prose with broken JSON or half-written tool_call payloads.',
       'Base your answer only on real tool outputs already provided.',
     ].join('\n');
   }
@@ -1322,6 +1358,7 @@ export class AgentRunner {
     await this.maybeBootstrapConfigContext(userInput);
 
     let invalidResponseCount = 0;
+    let malformedStructuredResponseCount = 0;
     let unusableResponseCount = 0;
     let ungroundedAnswerCount = 0;
     let styleRewriteCount = 0;
@@ -1360,6 +1397,38 @@ export class AgentRunner {
               'If you need a tool, return a valid JSON tool_call.',
               'If you are ready to answer, return a JSON message with a plain-language answer based only on real tool outputs already provided.',
             ].join('\n'),
+          });
+          continue;
+        }
+
+        if (
+          !this.isProtocolFormatQuestion(userInput) &&
+          this.looksLikeMalformedStructuredResponse(rawResponse)
+        ) {
+          malformedStructuredResponseCount += 1;
+          const fallback =
+            this.buildDeterministicFallback(userInput) ??
+            [
+              'The model kept returning malformed structured responses instead of a usable answer.',
+              'Please retry the request or switch to a stronger model/provider if this keeps happening.',
+            ].join('\n');
+          if (malformedStructuredResponseCount >= 2) {
+            this.ui.log(
+              'Model kept returning malformed structured responses. Returning a corrective fallback.'
+            );
+            this.history.push({
+              role: 'assistant',
+              content: fallback,
+            });
+            return fallback;
+          }
+
+          this.ui.log(
+            'Model returned a malformed structured response. Asking it to send one valid envelope.'
+          );
+          this.history.push({
+            role: 'user',
+            content: this.buildMalformedStructuredResponseRetryInstruction(),
           });
           continue;
         }

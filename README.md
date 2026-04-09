@@ -343,6 +343,7 @@ Model-specific prompt tuning:
 - `codex` gets shorter execution-oriented guidance for larger cross-file work
 - `openai-compatible` models get extra diagnostics-oriented guidance around API key, base URL, and live model mismatches
 - the agent also retries once when a provider returns an empty or obviously placeholder-like final answer before surfacing a fallback
+- the agent retries once when a reply looks like a broken `tool_call` / structured envelope instead of surfacing that malformed payload directly
 
 ## Safety defaults
 

@@ -174,6 +174,81 @@ async function runUnusableFinalResponseRecoverySmoke(): Promise<void> {
   });
 }
 
+async function runMalformedStructuredResponseRecoverySmoke(): Promise<void> {
+  await withTempDir('mmca-malformed-structured-', async (tempRoot) => {
+    const readFileTool: ToolDefinition = {
+      name: 'read_file',
+      description: 'Simulated file read.',
+      inputShape: '{"path":"README.md"}',
+      requiresApproval: false,
+      run: async () => ({
+        ok: true,
+        summary: 'Read README.md.',
+        output: 'Hello from README.',
+      }),
+    };
+
+    const recoveringAgent = new AgentRunner(
+      createConfig(tempRoot),
+      new SequenceAdapter([
+        [
+          'Here is the tool call:',
+          '```json',
+          '{"type":"tool_call","tool":"read_file","arguments":{"path":"README.md"}',
+          '```',
+        ].join('\n'),
+        JSON.stringify({
+          type: 'tool_call',
+          tool: 'read_file',
+          arguments: {
+            path: 'README.md',
+          },
+        }),
+        JSON.stringify({
+          type: 'message',
+          message: 'README.md says hello.',
+        }),
+      ]),
+      [readFileTool],
+      createSilentUi()
+    );
+
+    const recoveredReply = await recoveringAgent.runTurn('Read README.md and summarize it briefly.');
+    assert(
+      recoveredReply === 'README.md says hello.',
+      `Expected the agent to recover from a malformed structured response.\n\nReply:\n${recoveredReply}`
+    );
+
+    const failingAgent = new AgentRunner(
+      createConfig(tempRoot),
+      new SequenceAdapter([
+        [
+          'Tool call:',
+          '```json',
+          '{"type":"tool_call","tool":"read_file","arguments":{"path":"README.md"}',
+          '```',
+        ].join('\n'),
+        [
+          'Tool call:',
+          '```json',
+          '{"type":"tool_call","tool":"read_file","arguments":{"path":"README.md"}',
+          '```',
+        ].join('\n'),
+      ]),
+      [readFileTool],
+      createSilentUi()
+    );
+
+    const fallbackReply = await failingAgent.runTurn('Read README.md and summarize it briefly.');
+    assert(
+      fallbackReply.includes('malformed structured responses'),
+      `Expected a corrective fallback after repeated malformed structured responses.\n\nReply:\n${fallbackReply}`
+    );
+
+    console.log('[regression-smoke] Malformed structured response recovery passed.');
+  });
+}
+
 async function runNonJsGroundingSmoke(): Promise<void> {
   await withTempDir('mmca-go-grounding-', async (tempRoot) => {
     await writeFile(path.join(tempRoot, 'go.mod'), 'module example.com/demo\n\ngo 1.22\n');
@@ -366,6 +441,7 @@ async function runWindowsTimeoutCleanupSmoke(): Promise<void> {
 async function main(): Promise<void> {
   await runWritePatchFailureGuardSmoke();
   await runUnusableFinalResponseRecoverySmoke();
+  await runMalformedStructuredResponseRecoverySmoke();
   await runNonJsGroundingSmoke();
   await runOneShotExitCodeSmoke();
   await runWindowsTimeoutCleanupSmoke();

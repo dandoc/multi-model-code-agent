@@ -669,6 +669,7 @@ Summary:
 - `parseAgentEnvelope()` now normalizes more real-world response shapes, including stringified arguments, OpenAI-style `function_call` / `tool_calls`, jsonc-style fenced payloads, trailing commas, and single-item JSON arrays
 - added `npm run smoke:json-protocol` and folded it into the default smoke chain to lock in those response-normalization paths
 - the agent loop now retries once when a provider returns an empty or obviously placeholder-like final answer before falling back, with regression coverage for blank and `...`-style replies
+- the agent loop now also retries once when a reply looks like a broken `tool_call` / structured envelope, with regression coverage for both recovery and repeated-failure fallback
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:
