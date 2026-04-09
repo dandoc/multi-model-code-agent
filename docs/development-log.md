@@ -651,6 +651,7 @@ Summary:
 - profile loads reuse existing workdir validation and reset the conversation into a fresh session with the loaded runtime
 - `/status` now shows which saved profiles match the current runtime
 - added `/profiles search <query>` and `/profiles rename <old-name> --to <new-name>` for easier profile management
+- added `/profiles diff <name>` so a saved profile can be compared against the current runtime before load
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:

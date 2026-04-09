@@ -17,6 +17,7 @@ import {
   deleteProfile,
   loadProfile,
   renameProfile,
+  renderProfileDiff,
   renderMatchingProfilesLine,
   renderProfileList,
   saveProfile,
@@ -115,6 +116,8 @@ function printReplHelp(): void {
         '  /profiles            Show saved runtime profiles',
         '  /profiles search <query>',
         '                       Filter saved profiles by name, provider, model, base URL, or workdir',
+        '  /profiles diff <name>',
+        '                       Show what would change if you loaded one saved profile now',
         '  /profiles save <name>',
         '                       Save the current provider/model/workdir/flags as a named profile',
         '  /profiles rename <old-name> --to <new-name>',
@@ -709,6 +712,23 @@ async function main(): Promise<void> {
           await logSessionEvent(() => sessionStore.logCommand(entry));
           try {
             console.log(`\n${await renderProfileList(config, { query: request.query })}`);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.log(`\n${message}`);
+          }
+          continue;
+        }
+
+        if (request.kind === 'diff') {
+          await logSessionEvent(() => sessionStore.logCommand(entry));
+          try {
+            const profile = await loadProfile(request.name);
+            if (!profile) {
+              console.log(`\nCould not find a saved profile named "${request.name}". Use /profiles to inspect saved names.`);
+              continue;
+            }
+
+            console.log(`\n${renderProfileDiff(config, profile)}`);
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             console.log(`\n${message}`);

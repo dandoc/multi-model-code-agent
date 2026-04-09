@@ -126,6 +126,10 @@ export type ProfilesRequest =
       query: string;
     }
   | {
+      kind: 'diff';
+      name: string;
+    }
+  | {
       kind: 'save';
       name: string;
     }
@@ -360,6 +364,14 @@ export function parseProfilesRequest(entry: string): ProfilesRequest {
 
   const name = args.slice(1).join(' ').trim();
 
+  if (mode === 'diff' || mode === 'show') {
+    if (!name) {
+      return { kind: 'invalid', reason: 'Use /profiles diff <name>.' };
+    }
+
+    return { kind: 'diff', name };
+  }
+
   if (mode === 'save') {
     if (!name) {
       return { kind: 'invalid', reason: 'Use /profiles save <name>.' };
@@ -411,7 +423,7 @@ export function parseProfilesRequest(entry: string): ProfilesRequest {
   return {
     kind: 'invalid',
     reason:
-      'Use /profiles, /profiles search <query>, /profiles save <name>, /profiles rename <old-name> --to <new-name>, /profiles load <name>, or /profiles delete <name>.',
+      'Use /profiles, /profiles search <query>, /profiles diff <name>, /profiles save <name>, /profiles rename <old-name> --to <new-name>, /profiles load <name>, or /profiles delete <name>.',
   };
 }
 

@@ -9,6 +9,7 @@ import {
   listProfiles,
   loadProfile,
   renameProfile,
+  renderProfileDiff,
   renderMatchingProfilesLine,
   renderProfileList,
   saveProfile,
@@ -101,6 +102,41 @@ async function main(): Promise<void> {
     });
     if (matchLine !== 'Matching profiles: local-qwen') {
       throw new Error(`Unexpected matching profile line: ${matchLine}`);
+    }
+    const diffSame = renderProfileDiff(
+      {
+        provider: 'ollama',
+        model: 'qwen3-coder:30b',
+        baseUrl: 'http://127.0.0.1:11434',
+        workdir: workdirA,
+        autoApprove: false,
+        maxTurns: 8,
+        temperature: 0.2,
+      },
+      saved
+    );
+    if (!diffSame.includes('No changes. This profile already matches the current runtime exactly.')) {
+      throw new Error('Profile diff should explain when the saved profile already matches the current runtime.');
+    }
+    const diffChanged = renderProfileDiff(
+      {
+        provider: 'codex',
+        model: 'gpt-5.4',
+        baseUrl: 'http://127.0.0.1:11434',
+        workdir: workdirB,
+        autoApprove: true,
+        maxTurns: 42,
+        temperature: 0.7,
+      },
+      saved
+    );
+    if (
+      !diffChanged.includes('Changed fields (6):') ||
+      !diffChanged.includes(`- provider: codex -> ollama`) ||
+      !diffChanged.includes(`- workdir: ${workdirB} -> ${workdirA}`) ||
+      !diffChanged.includes(`- autoApprove: true -> false`)
+    ) {
+      throw new Error('Profile diff should list changed runtime fields.');
     }
     const noMatchLine = await renderMatchingProfilesLine({
       provider: 'ollama',

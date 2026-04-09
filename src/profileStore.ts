@@ -26,6 +26,12 @@ type ProfileListRenderOptions = {
   query?: string;
 };
 
+type ProfileDiffField = {
+  label: string;
+  current: string;
+  saved: string;
+};
+
 function getProfilesPath(): string {
   return path.join(getAgentHomeDir(), 'profiles.json');
 }
@@ -142,6 +148,50 @@ function formatTimestamp(timestamp: string): string {
   }
   const iso = date.toISOString();
   return `${iso.slice(0, 10)} ${iso.slice(11, 19)} UTC`;
+}
+
+function renderBoolean(value: boolean): string {
+  return value ? 'true' : 'false';
+}
+
+function collectProfileDiff(currentConfig: AgentConfig, profile: SavedProfile): ProfileDiffField[] {
+  const fields: ProfileDiffField[] = [];
+
+  if (currentConfig.provider !== profile.provider) {
+    fields.push({ label: 'provider', current: currentConfig.provider, saved: profile.provider });
+  }
+  if (currentConfig.model !== profile.model) {
+    fields.push({ label: 'model', current: currentConfig.model, saved: profile.model });
+  }
+  if (currentConfig.baseUrl !== profile.baseUrl) {
+    fields.push({ label: 'base URL', current: currentConfig.baseUrl, saved: profile.baseUrl });
+  }
+  if (currentConfig.workdir !== profile.workdir) {
+    fields.push({ label: 'workdir', current: currentConfig.workdir, saved: profile.workdir });
+  }
+  if (currentConfig.autoApprove !== profile.autoApprove) {
+    fields.push({
+      label: 'autoApprove',
+      current: renderBoolean(currentConfig.autoApprove),
+      saved: renderBoolean(profile.autoApprove),
+    });
+  }
+  if (currentConfig.maxTurns !== profile.maxTurns) {
+    fields.push({
+      label: 'maxTurns',
+      current: String(currentConfig.maxTurns),
+      saved: String(profile.maxTurns),
+    });
+  }
+  if (currentConfig.temperature !== profile.temperature) {
+    fields.push({
+      label: 'temperature',
+      current: String(currentConfig.temperature),
+      saved: String(profile.temperature),
+    });
+  }
+
+  return fields;
 }
 
 async function loadProfilesFile(): Promise<StoredProfilesFile> {
@@ -276,6 +326,28 @@ export async function renameProfile(fromName: string, toName: string): Promise<S
     await writeProfilesFile(nextProfiles);
     return renamed;
   });
+}
+
+export function renderProfileDiff(currentConfig: AgentConfig, profile: SavedProfile): string {
+  const diffFields = collectProfileDiff(currentConfig, profile);
+  const lines = [
+    `Profile diff: ${profile.name}`,
+    `Updated: ${formatTimestamp(profile.updatedAt)}`,
+    `Current runtime: provider=${currentConfig.provider}, model=${currentConfig.model}, workdir=${currentConfig.workdir}`,
+    `Saved profile: provider=${profile.provider}, model=${profile.model}, workdir=${profile.workdir}`,
+  ];
+
+  if (diffFields.length === 0) {
+    lines.push('No changes. This profile already matches the current runtime exactly.');
+    return lines.join('\n');
+  }
+
+  lines.push(`Changed fields (${diffFields.length}):`);
+  for (const field of diffFields) {
+    lines.push(`- ${field.label}: ${field.current} -> ${field.saved}`);
+  }
+
+  return lines.join('\n');
 }
 
 export async function deleteProfile(name: string): Promise<boolean> {

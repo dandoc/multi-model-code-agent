@@ -125,6 +125,7 @@ npm run dev
 - `/sessions prune <keep-count>`
 - `/profiles`
 - `/profiles search <query>`
+- `/profiles diff <name>`
 - `/profiles save <name>`
 - `/profiles rename <old-name> --to <new-name>`
 - `/profiles load <name>`
@@ -206,6 +207,7 @@ Each REPL session now writes a small JSONL log so you can inspect recent activit
 - use `/profiles save <name>` to store the current provider, model, base URL, workdir, and runtime flags as a reusable profile
 - use `/profiles` to list saved profiles and see which one matches the current runtime
 - use `/profiles search <query>` to filter saved profiles by name, provider, model, base URL, or workdir
+- use `/profiles diff <name>` to see what would change before loading a saved profile
 - use `/profiles rename <old-name> --to <new-name>` to rename a saved profile without recreating it
 - use `/profiles load <name>` to restore a saved profile into the current runtime and reset the conversation
 - use `/profiles delete <name>` to remove a saved profile after confirmation

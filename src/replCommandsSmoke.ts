@@ -218,6 +218,12 @@ async function main(): Promise<void> {
     'Expected /profiles search <query> to parse correctly.'
   );
 
+  const profilesDiff = parseProfilesRequest('/profiles diff remote codex');
+  assert(
+    profilesDiff.kind === 'diff' && profilesDiff.name === 'remote codex',
+    'Expected /profiles diff <name> to parse correctly.'
+  );
+
   const profilesSave = parseProfilesRequest('/profiles save local qwen');
   assert(
     profilesSave.kind === 'save' && profilesSave.name === 'local qwen',
@@ -246,6 +252,12 @@ async function main(): Promise<void> {
 
   const profilesInvalid = parseProfilesRequest('/profiles save');
   assert(profilesInvalid.kind === 'invalid', 'Expected incomplete /profiles save to be rejected.');
+
+  const profilesDiffInvalid = parseProfilesRequest('/profiles diff');
+  assert(
+    profilesDiffInvalid.kind === 'invalid',
+    'Expected incomplete /profiles diff to be rejected.'
+  );
 
   const profilesRenameWithSpaces = parseProfilesRequest('/profiles rename remote codex --to remote gpt five');
   assert(
