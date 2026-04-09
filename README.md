@@ -174,6 +174,7 @@ This runs:
 - a provider adapter retry/fallback regression check
 - a provider-readiness doctor regression check
 - a live-provider smoke-matrix regression check
+- a JSON/tool-call normalization regression check
 
 For a focused shell-selection regression check, run:
 

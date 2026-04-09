@@ -665,6 +665,8 @@ Summary:
 - saved profiles and runtime-aware resume now preserve the effective request-timeout setting as part of the runtime snapshot
 - `/models ... smoke` now runs a tiny live completion matrix and skips providers that already fail blocking readiness checks
 - added `npm run smoke:live` for manual live provider checks and `npm run smoke:live-matrix` for a non-live regression harness that is folded into the default smoke chain
+- `parseAgentEnvelope()` now normalizes more real-world response shapes, including stringified arguments, OpenAI-style `function_call` / `tool_calls`, jsonc-style fenced payloads, trailing commas, and single-item JSON arrays
+- added `npm run smoke:json-protocol` and folded it into the default smoke chain to lock in those response-normalization paths
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:
