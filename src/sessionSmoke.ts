@@ -578,6 +578,99 @@ async function main(): Promise<void> {
       'resumed runtime status'
     );
 
+    const runtimeResumeRoot = path.join(tempRoot, 'runtime-resume-home');
+    const runtimeResumeWorkdirA = path.join(runtimeResumeRoot, 'workspace-a');
+    const runtimeResumeWorkdirB = path.join(runtimeResumeRoot, 'workspace-b');
+    process.env.MM_AGENT_HOME = runtimeResumeRoot;
+    await mkdir(runtimeResumeWorkdirA, { recursive: true });
+    await mkdir(runtimeResumeWorkdirB, { recursive: true });
+
+    const runtimeResumeStore = await createSessionStore(
+      {
+        provider: 'ollama',
+        model: 'qwen2.5-coder:7b',
+        baseUrl: 'http://127.0.0.1:11434',
+        workdir: runtimeResumeWorkdirA,
+        autoApprove: false,
+        maxTurns: 8,
+        temperature: 0.2,
+      },
+      runtimeResumeWorkdirA,
+      'runtime resume smoke'
+    );
+    await runtimeResumeStore.logConfig('provider switch', {
+      provider: 'openai',
+      model: 'gpt-5.4',
+      baseUrl: 'https://api.example.test/v1',
+      workdir: runtimeResumeWorkdirB,
+      autoApprove: true,
+      maxTurns: 42,
+      temperature: 1.1,
+    });
+    await runtimeResumeStore.logMessage('user', 'Resume the updated runtime.');
+    await runtimeResumeStore.logMessage('assistant', 'Updated runtime is ready.');
+
+    const runtimeResumedConversation = await loadSessionConversation(runtimeResumeStore.sessionPath, 10);
+    if (runtimeResumedConversation.provider !== 'openai') {
+      throw new Error(
+        `Expected runtime resume provider to reflect the latest config event, got ${runtimeResumedConversation.provider}.`
+      );
+    }
+    if (runtimeResumedConversation.model !== 'gpt-5.4') {
+      throw new Error(
+        `Expected runtime resume model to reflect the latest config event, got ${runtimeResumedConversation.model}.`
+      );
+    }
+    if (runtimeResumedConversation.workdir !== runtimeResumeWorkdirB) {
+      throw new Error(
+        `Expected runtime resume workdir to reflect the latest config event, got ${runtimeResumedConversation.workdir}.`
+      );
+    }
+    if (runtimeResumedConversation.autoApprove !== true) {
+      throw new Error('Expected runtime resume autoApprove to reflect the latest config event.');
+    }
+    if (runtimeResumedConversation.maxTurns !== 42) {
+      throw new Error(
+        `Expected runtime resume maxTurns to reflect the latest config event, got ${runtimeResumedConversation.maxTurns}.`
+      );
+    }
+    if (runtimeResumedConversation.temperature !== 1.1) {
+      throw new Error(
+        `Expected runtime resume temperature to reflect the latest config event, got ${runtimeResumedConversation.temperature}.`
+      );
+    }
+    assertIncludesAll(
+      renderResumeContext(
+        runtimeResumedConversation,
+        {
+          provider: 'openai',
+          model: 'gpt-5.4',
+          baseUrl: 'https://api.example.test/v1',
+          workdir: runtimeResumeWorkdirB,
+          autoApprove: true,
+          maxTurns: 42,
+          temperature: 1.1,
+        },
+        { runtimeApplied: true }
+      ),
+      [
+        `Source session: provider=openai, model=gpt-5.4, workdir=${runtimeResumeWorkdirB}`,
+        `Current runtime: provider=openai, model=gpt-5.4, workdir=${runtimeResumeWorkdirB}`,
+        'Note: conversation and saved runtime were restored. API keys are not stored in session logs, so use /api-key if this restored OpenAI session needs one.',
+      ],
+      'runtime resume context'
+    );
+    assertIncludesAll(
+      await renderSessionSummary(runtimeResumeStore.sessionPath, 5),
+      [
+        `Provider/model: openai / gpt-5.4`,
+        `Workdir: ${runtimeResumeWorkdirB}`,
+      ],
+      'runtime-updated session summary'
+    );
+
+    process.env.MM_AGENT_HOME = tempRoot;
+
     const bulkRoot = path.join(tempRoot, 'bulk-home');
     const bulkSessionsDir = path.join(bulkRoot, 'sessions');
     const oldestSessionId = '2026-01-01T00-00-00-000Z-bulk-000000';

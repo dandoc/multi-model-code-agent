@@ -631,6 +631,7 @@ Validation:
 Summary:
 
 - added `/resume runtime ...` so saved provider, model, workdir, and runtime flags can be restored together with the conversation
+- runtime-aware resume now uses the latest saved config event instead of only the initial session_started snapshot
 - reused existing workdir validation so missing or unsafe saved workdirs are rejected instead of being restored blindly
 - expanded REPL/session smoke coverage for runtime-aware resume parsing and recap messaging
 

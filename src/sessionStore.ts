@@ -344,6 +344,30 @@ function deriveSessionTitle(events: SessionEvent[], reason: string): string {
   return '(no prompt yet)';
 }
 
+function findSessionStartedEvent(
+  events: SessionEvent[]
+): Extract<SessionEvent, { type: 'session_started' }> | undefined {
+  return events.find(
+    (event): event is Extract<SessionEvent, { type: 'session_started' }> =>
+      event.type === 'session_started'
+  );
+}
+
+function deriveEffectiveSessionConfig(events: SessionEvent[]): SessionConfigSnapshot | undefined {
+  const startedEvent = findSessionStartedEvent(events);
+  if (!startedEvent) {
+    return undefined;
+  }
+
+  const latestConfigEvent = [...events]
+    .reverse()
+    .find(
+      (event): event is Extract<SessionEvent, { type: 'config' }> => event.type === 'config'
+    );
+
+  return latestConfigEvent?.config ?? startedEvent.config;
+}
+
 async function appendEvent(sessionPath: string, event: SessionEvent): Promise<void> {
   await appendFile(sessionPath, `${JSON.stringify(event)}\n`, 'utf8');
 }
@@ -433,7 +457,7 @@ async function loadSessionEntry(sessionPath: string): Promise<SessionEntryLoad> 
     };
   }
 
-  const startedEvent = loaded.events.find((event) => event.type === 'session_started');
+  const startedEvent = findSessionStartedEvent(loaded.events);
   if (!startedEvent || startedEvent.type !== 'session_started') {
     return {
       entry: null,
@@ -449,6 +473,7 @@ async function loadSessionEntry(sessionPath: string): Promise<SessionEntryLoad> 
   const lastUserMessage = findLastUserMessage(loaded.events);
   const lastAssistantMessage = findLastAssistantMessage(loaded.events);
   const lastMeaningfulCommand = findLastMeaningfulCommand(loaded.events);
+  const effectiveConfig = deriveEffectiveSessionConfig(loaded.events) ?? startedEvent.config;
 
   return {
     entry: {
@@ -461,9 +486,9 @@ async function loadSessionEntry(sessionPath: string): Promise<SessionEntryLoad> 
       lastUserMessage: lastUserMessage?.content,
       lastAssistantReply: lastAssistantMessage?.content,
       lastMeaningfulCommand: lastMeaningfulCommand?.command,
-      workdir: startedEvent.config.workdir,
-      provider: startedEvent.config.provider,
-      model: startedEvent.config.model,
+      workdir: effectiveConfig.workdir,
+      provider: effectiveConfig.provider,
+      model: effectiveConfig.model,
       reason: startedEvent.reason,
     },
     malformedLineCount: loaded.malformedLineCount,
@@ -1006,12 +1031,13 @@ export async function renderSessionSummary(sessionPath: string, limit = 5): Prom
     return 'No session events were recorded.';
   }
 
-  const startedEvent = events.find((event) => event.type === 'session_started');
+  const startedEvent = findSessionStartedEvent(events);
   if (!startedEvent || startedEvent.type !== 'session_started') {
     return `Session log is corrupted: missing a readable session_started event in ${sessionPath}.`;
   }
 
   const summary = summarizeSessionActivity(events);
+  const effectiveConfig = deriveEffectiveSessionConfig(events) ?? startedEvent.config;
   const title = deriveSessionTitle(events, startedEvent.reason);
   const firstUserMessage = findFirstMeaningfulUserMessage(events);
   const lastUserMessage = findLastUserMessage(events);
@@ -1025,8 +1051,8 @@ export async function renderSessionSummary(sessionPath: string, limit = 5): Prom
     `Title: ${title}`,
     `Started: ${formatSessionTimestamp(startedEvent.timestamp)}`,
     `Last active: ${formatSessionTimestamp(events.at(-1)?.timestamp ?? startedEvent.timestamp)}`,
-    `Provider/model: ${startedEvent.config.provider} / ${startedEvent.config.model || '(provider default)'}`,
-    `Workdir: ${startedEvent.config.workdir}`,
+    `Provider/model: ${effectiveConfig.provider} / ${effectiveConfig.model || '(provider default)'}`,
+    `Workdir: ${effectiveConfig.workdir}`,
     `Reason: ${startedEvent.reason}`,
     `Activity: user=${summary.userMessages}, assistant=${summary.assistantMessages}, repl commands=${summary.replCommands}, config=${summary.configChanges}, total=${summary.totalEvents}`,
     `Profile: ${summary.profile}`,
@@ -1106,7 +1132,8 @@ export async function renderSessionHistory(sessionPath: string, limit = 12): Pro
     return 'No session events were recorded.';
   }
 
-  const startedEvent = events.find((event) => event.type === 'session_started');
+  const startedEvent = findSessionStartedEvent(events);
+  const effectiveConfig = deriveEffectiveSessionConfig(events);
   const visibleEvents = events.filter((event) => event.type !== 'session_started').slice(-limit);
 
   const headerLines = [
@@ -1117,8 +1144,8 @@ export async function renderSessionHistory(sessionPath: string, limit = 12): Pro
     startedEvent && startedEvent.type === 'session_started'
       ? `Started: ${startedEvent.timestamp}`
       : '',
-    startedEvent && startedEvent.type === 'session_started'
-      ? `Workdir: ${startedEvent.config.workdir}`
+    startedEvent && startedEvent.type === 'session_started' && effectiveConfig
+      ? `Workdir: ${effectiveConfig.workdir}`
       : '',
   ].filter(Boolean);
 
@@ -1181,7 +1208,8 @@ export async function loadSessionConversation(
     throw new Error(`Session log could not be read: ${loaded.readError}`);
   }
 
-  const startedEvent = loaded.events.find((event) => event.type === 'session_started');
+  const startedEvent = findSessionStartedEvent(loaded.events);
+  const effectiveConfig = deriveEffectiveSessionConfig(loaded.events);
   const messageEvents = loaded.events.filter(
     (event): event is Extract<SessionEvent, { type: 'message' }> => event.type === 'message'
   );
@@ -1219,38 +1247,14 @@ export async function loadSessionConversation(
       startedEvent && startedEvent.type === 'session_started'
         ? deriveSessionTitle(loaded.events, startedEvent.reason)
         : '(unknown session)',
-    workdir:
-      startedEvent && startedEvent.type === 'session_started'
-        ? startedEvent.config.workdir
-        : undefined,
-    provider:
-      startedEvent && startedEvent.type === 'session_started'
-        ? startedEvent.config.provider
-        : undefined,
-    model:
-      startedEvent && startedEvent.type === 'session_started'
-        ? startedEvent.config.model
-        : undefined,
-    baseUrl:
-      startedEvent && startedEvent.type === 'session_started'
-        ? startedEvent.config.baseUrl
-        : undefined,
-    autoApprove:
-      startedEvent && startedEvent.type === 'session_started'
-        ? startedEvent.config.autoApprove
-        : undefined,
-    maxTurns:
-      startedEvent && startedEvent.type === 'session_started'
-        ? startedEvent.config.maxTurns
-        : undefined,
-    temperature:
-      startedEvent && startedEvent.type === 'session_started'
-        ? startedEvent.config.temperature
-        : undefined,
-    apiKeySet:
-      startedEvent && startedEvent.type === 'session_started'
-        ? startedEvent.config.apiKeySet
-        : undefined,
+    workdir: effectiveConfig?.workdir,
+    provider: effectiveConfig?.provider,
+    model: effectiveConfig?.model,
+    baseUrl: effectiveConfig?.baseUrl,
+    autoApprove: effectiveConfig?.autoApprove,
+    maxTurns: effectiveConfig?.maxTurns,
+    temperature: effectiveConfig?.temperature,
+    apiKeySet: effectiveConfig?.apiKeySet,
     reason:
       startedEvent && startedEvent.type === 'session_started'
         ? startedEvent.reason
