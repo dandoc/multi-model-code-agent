@@ -656,6 +656,7 @@ Summary:
 - `/models ... search <query>` now filters provider model lists and shows short family hints for common model families
 - `/models ... doctor` now diagnoses provider readiness and common setup failures for Ollama, OpenAI-compatible endpoints, and Codex CLI
 - `/temperature` and `/max-turns` now tune the current session runtime without restarting or persisting to `.env`
+- the system prompt now injects provider/model-specific operating guidance so Qwen, Gemma, Codex, and OpenAI-compatible paths get different grounding and failure-handling hints
 - profiles intentionally exclude API keys so secrets stay session-local
 
 Validation:

@@ -1,4 +1,6 @@
 import { describeModelFamily, renderModelCatalogs, renderModelDiagnostics } from './providerModels.js';
+import { buildSystemPrompt } from './prompt.js';
+import { createTools } from './tools.js';
 
 import type { AgentConfig } from './types.js';
 
@@ -118,6 +120,57 @@ async function main(): Promise<void> {
     invalidOpenAiDoctor.includes('Skipped the live /models probe') &&
       invalidOpenAiDoctor.includes('status       blocked'),
     'Expected OpenAI doctor output to skip live probing when the base URL is invalid.'
+  );
+
+  const tools = createTools();
+  const qwenPrompt = buildSystemPrompt(config, tools);
+  assert(
+    qwenPrompt.includes('Qwen3 Coder can handle broader reasoning') &&
+      qwenPrompt.includes('Prefer one decisive tool call at a time'),
+    'Expected the system prompt to include Qwen-local tuning guidance.'
+  );
+
+  const gemmaPrompt = buildSystemPrompt(
+    {
+      ...config,
+      model: 'gemma3:12b',
+    },
+    tools
+  );
+  assert(
+    gemmaPrompt.includes('Gemma-class local models need extra grounding'),
+    'Expected the system prompt to include Gemma-specific grounding guidance.'
+  );
+
+  const codexPrompt = buildSystemPrompt(
+    {
+      ...config,
+      provider: 'codex',
+      model: 'gpt-5.4',
+      baseUrl: '',
+    },
+    tools
+  );
+  assert(
+    codexPrompt.includes('This is the Codex CLI path') &&
+      codexPrompt.includes('adapt once quickly'),
+    'Expected the system prompt to include Codex-specific operating guidance.'
+  );
+
+  const openAiPrompt = buildSystemPrompt(
+    {
+      ...config,
+      provider: 'openai',
+      model: 'gpt-4.1',
+      baseUrl: 'https://api.example.test/v1',
+      apiKey: 'test-key',
+    },
+    tools
+  );
+  assert(
+    openAiPrompt.includes('This is an OpenAI-compatible remote path') &&
+      openAiPrompt.includes('likely auth/base-url/model mismatch'),
+    'Expected the system prompt to include OpenAI-compatible diagnostic guidance.'
   );
 
   console.log('[models-smoke] All model catalog checks passed.');

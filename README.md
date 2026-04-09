@@ -314,6 +314,13 @@ Session tuning:
 - `/max-turns <value|default>` updates the current session turn budget without restarting the REPL
 - these settings are included if you later save the current runtime as a profile
 
+Model-specific prompt tuning:
+
+- the system prompt now adapts its operating guidance by provider/model family
+- local `Qwen` and `Gemma` paths are pushed toward smaller grounded steps and more deterministic helper usage
+- `codex` gets shorter execution-oriented guidance for larger cross-file work
+- `openai-compatible` models get extra diagnostics-oriented guidance around API key, base URL, and live model mismatches
+
 ## Safety defaults
 
 - `write_patch` requires approval unless auto-approve is on
