@@ -113,6 +113,8 @@ npm run dev
 - `/resume [count]`
 - `/resume latest [count]`
 - `/resume <session-id> [count]`
+- `/resume runtime latest [count]`
+- `/resume runtime <session-id> [count]`
 - `/sessions [count]`
 - `/sessions summary <current|latest|session-id> [count]`
 - `/sessions compare [count]`
@@ -186,6 +188,7 @@ Each REPL session now writes a small JSONL log so you can inspect recent activit
 - use `/resume latest` to replace the current conversation with messages from the most recent earlier session
 - use `/resume <session-id>` to continue from a specific saved session by full or unique prefix id
 - `/resume` only restores saved user/assistant messages; your current provider, model, and workdir stay as they are
+- use `/resume runtime latest` or `/resume runtime <session-id>` to restore the saved provider, model, workdir, and runtime flags together with the conversation
 - `/resume` now prints a short context recap with the saved session title, last active time, activity profile, and the last visible user/assistant messages
 - use `/status` to see the current runtime config together with the current saved session id, resume source, activity profile, and latest visible messages
 - corrupted or schema-invalid session logs are skipped during browsing with a visible warning

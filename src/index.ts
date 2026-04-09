@@ -81,14 +81,16 @@ function printReplHelp(): void {
       '  /config               Show current config',
       '  /status               Show current runtime + saved-session status',
       '  /history [count]      Show recent events from the current saved session',
-      '  /history latest [count] or /history <session-id> [count]',
-      '                       Show events from an earlier saved session',
-      '  /resume [count]       Resume the latest earlier session into the current conversation',
-      '  /resume latest [count] or /resume <session-id> [count]',
-      '                       Replace the current conversation with saved user/assistant messages',
-      '  /sessions [count]     Show recent saved sessions',
-      '  /sessions summary <current|latest|session-id> [count]',
-      '                       Show a focused summary for one saved session',
+        '  /history latest [count] or /history <session-id> [count]',
+        '                       Show events from an earlier saved session',
+        '  /resume [count]       Resume the latest earlier session into the current conversation',
+        '  /resume latest [count] or /resume <session-id> [count]',
+        '                       Replace the current conversation with saved user/assistant messages',
+        '  /resume runtime latest [count] or /resume runtime <session-id> [count]',
+        '                       Also restore provider/model/workdir/flags from the saved session',
+        '  /sessions [count]     Show recent saved sessions',
+        '  /sessions summary <current|latest|session-id> [count]',
+        '                       Show a focused summary for one saved session',
       '  /sessions compare [count]',
       '                       Compare recent non-idle sessions by activity profile and event counts',
       '  /sessions compare all [count]',
@@ -364,11 +366,11 @@ async function main(): Promise<void> {
 
       if (entry === '/resume' || entry.startsWith('/resume ')) {
         await logSessionEvent(() => sessionStore.logCommand(entry));
-        const request = parseResumeRequest(entry);
+          const request = parseResumeRequest(entry);
 
-        try {
-          const resolution = await resolveSessionEntry(request.sessionRef ?? 'latest', sessionStore.sessionId);
-          if (!resolution.entry) {
+          try {
+            const resolution = await resolveSessionEntry(request.sessionRef ?? 'latest', sessionStore.sessionId);
+            if (!resolution.entry) {
             console.log(
               `\nCould not find a saved session for "${request.sessionRef ?? 'latest'}". Use /sessions to inspect recent ids.`
             );
@@ -394,26 +396,63 @@ async function main(): Promise<void> {
                 .filter(Boolean)
                 .join('\n')}`
             );
-            continue;
-          }
+              continue;
+            }
 
-          agent.replaceHistory(loadedConversation.messages);
-          lastResumedSessionId = loadedConversation.sessionId;
+            if (request.applyRuntime) {
+              if (!loadedConversation.provider) {
+                console.log('\nThis saved session is missing a readable provider, so its runtime could not be restored.');
+                continue;
+              }
+              if (!loadedConversation.workdir) {
+                console.log('\nThis saved session is missing a readable workdir, so its runtime could not be restored.');
+                continue;
+              }
 
-          const resumeMessage = renderResumeContext(
-            {
-              ...loadedConversation,
+              const restoredWorkdir = resolveValidatedWorkdir(loadedConversation.workdir);
+              const restoredProvider = loadedConversation.provider;
+              const restoredBaseUrl =
+                restoredProvider === 'codex'
+                  ? providerDefaultBaseUrl(restoredProvider)
+                  : (loadedConversation.baseUrl || providerDefaultBaseUrl(restoredProvider)).replace(/\/+$/, '');
+              const restoredModel =
+                loadedConversation.model || providerDefaultModel(restoredProvider);
+
+              rebuildRuntime(
+                updateConfig(config, {
+                  provider: restoredProvider,
+                  model: restoredModel,
+                  baseUrl: restoredBaseUrl,
+                  workdir: restoredWorkdir,
+                  autoApprove: loadedConversation.autoApprove ?? config.autoApprove,
+                  maxTurns: loadedConversation.maxTurns ?? config.maxTurns,
+                  temperature: loadedConversation.temperature ?? config.temperature,
+                }),
+                true
+              );
+              await logSessionEvent(() => sessionStore.logConfig('resume runtime sync', config));
+            } else {
+              agent.reset();
+            }
+
+            agent.replaceHistory(loadedConversation.messages);
+            lastResumedSessionId = loadedConversation.sessionId;
+
+            const resumeMessage = renderResumeContext(
+              {
+                ...loadedConversation,
               provider: loadedConversation.provider ?? resolution.entry.provider,
               model: loadedConversation.model || resolution.entry.model,
-              workdir: loadedConversation.workdir ?? resolution.entry.workdir,
-              title: loadedConversation.title || resolution.entry.title,
-              lastActivityAt: loadedConversation.lastActivityAt ?? resolution.entry.lastActivityAt,
-            },
-            config
-          );
+                workdir: loadedConversation.workdir ?? resolution.entry.workdir,
+                title: loadedConversation.title || resolution.entry.title,
+                lastActivityAt: loadedConversation.lastActivityAt ?? resolution.entry.lastActivityAt,
+              },
+              config,
+              { runtimeApplied: request.applyRuntime }
+            );
 
-          console.log(`\n${resumeMessage}`);
-          await logSessionEvent(() => sessionStore.logMessage('assistant', resumeMessage));
+            console.log(`\n${resumeMessage}`);
+            await logSessionEvent(() => sessionStore.logMessage('assistant', resumeMessage));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           console.log(`\n${message}`);

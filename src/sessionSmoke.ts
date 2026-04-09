@@ -537,6 +537,30 @@ async function main(): Promise<void> {
       'previous resume context'
     );
     assertIncludesAll(
+      renderResumeContext(
+        {
+          ...resumedConversation,
+          baseUrl: 'http://127.0.0.1:11434',
+          autoApprove: false,
+          maxTurns: 8,
+          temperature: 0.2,
+        },
+        {
+          ...config,
+          provider: 'ollama',
+          model: 'qwen2.5-coder:7b',
+          workdir: previousWorkdir,
+        },
+        { runtimeApplied: true }
+      ),
+      [
+        `Resumed 2 messages from session ${previousStore.sessionId}.`,
+        `Current runtime: provider=ollama, model=qwen2.5-coder:7b, workdir=${previousWorkdir}`,
+        'Note: conversation and saved runtime were restored from the saved session.',
+      ],
+      'previous resume context with runtime applied'
+    );
+    assertIncludesAll(
       renderRuntimeStatus(
         resumedConversation,
         config,

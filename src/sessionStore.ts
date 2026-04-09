@@ -98,6 +98,11 @@ export type SessionConversationLoad = {
   workdir?: string;
   provider?: AgentConfig['provider'];
   model?: string;
+  baseUrl?: string;
+  autoApprove?: boolean;
+  maxTurns?: number;
+  temperature?: number;
+  apiKeySet?: boolean;
   reason?: string;
   messages: ChatMessage[];
   totalMessages: number;
@@ -1226,6 +1231,26 @@ export async function loadSessionConversation(
       startedEvent && startedEvent.type === 'session_started'
         ? startedEvent.config.model
         : undefined,
+    baseUrl:
+      startedEvent && startedEvent.type === 'session_started'
+        ? startedEvent.config.baseUrl
+        : undefined,
+    autoApprove:
+      startedEvent && startedEvent.type === 'session_started'
+        ? startedEvent.config.autoApprove
+        : undefined,
+    maxTurns:
+      startedEvent && startedEvent.type === 'session_started'
+        ? startedEvent.config.maxTurns
+        : undefined,
+    temperature:
+      startedEvent && startedEvent.type === 'session_started'
+        ? startedEvent.config.temperature
+        : undefined,
+    apiKeySet:
+      startedEvent && startedEvent.type === 'session_started'
+        ? startedEvent.config.apiKeySet
+        : undefined,
     reason:
       startedEvent && startedEvent.type === 'session_started'
         ? startedEvent.reason
@@ -1250,7 +1275,10 @@ export async function loadSessionConversation(
 
 export function renderResumeContext(
   loadedConversation: SessionConversationLoad,
-  currentConfig: AgentConfig
+  currentConfig: AgentConfig,
+  options?: {
+    runtimeApplied?: boolean;
+  }
 ): string {
   const sourceSummary = `Source session: provider=${
     loadedConversation.provider ?? '(unknown)'
@@ -1260,6 +1288,12 @@ export function renderResumeContext(
   const currentSummary = `Current runtime: provider=${currentConfig.provider}, model=${
     currentConfig.model || '(provider default)'
   }, workdir=${currentConfig.workdir}`;
+  const runtimeApplied = options?.runtimeApplied === true;
+  const runtimeNote = runtimeApplied
+    ? loadedConversation.provider === 'openai' && !currentConfig.apiKey
+      ? 'Note: conversation and saved runtime were restored. API keys are not stored in session logs, so use /api-key if this restored OpenAI session needs one.'
+      : 'Note: conversation and saved runtime were restored from the saved session.'
+    : 'Note: resume restores conversation only. The current runtime above will handle the next turn.';
 
   const lines = [
     loadedConversation.warning,
@@ -1276,7 +1310,7 @@ export function renderResumeContext(
       : undefined,
     sourceSummary,
     currentSummary,
-    'Note: resume restores conversation only. The current runtime above will handle the next turn.',
+    runtimeNote,
     `Activity: user=${loadedConversation.userMessages}, assistant=${loadedConversation.assistantMessages}, repl commands=${loadedConversation.replCommands}, config=${loadedConversation.configChanges}, profile=${loadedConversation.profile}`,
     loadedConversation.firstRequest
       ? `First request: ${truncateInline(loadedConversation.firstRequest)}`

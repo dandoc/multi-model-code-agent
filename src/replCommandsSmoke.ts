@@ -173,14 +173,34 @@ async function main(): Promise<void> {
 
   const resumeById = parseResumeRequest('/resume 2026-04-08T08-54-23-747Z-l4o0ov');
   assert(
-    resumeById.sessionRef === '2026-04-08T08-54-23-747Z-l4o0ov' && resumeById.count === 24,
+    resumeById.sessionRef === '2026-04-08T08-54-23-747Z-l4o0ov' &&
+      resumeById.count === 24 &&
+      resumeById.applyRuntime === false,
     'Expected /resume <session-id> to resolve as a session reference.'
   );
 
   const resumeByCount = parseResumeRequest('/resume 40');
   assert(
-    resumeByCount.sessionRef === 'latest' && resumeByCount.count === 40,
+    resumeByCount.sessionRef === 'latest' &&
+      resumeByCount.count === 40 &&
+      resumeByCount.applyRuntime === false,
     'Expected /resume <count> to keep using latest.'
+  );
+
+  const resumeRuntimeLatest = parseResumeRequest('/resume runtime latest 16');
+  assert(
+    resumeRuntimeLatest.sessionRef === 'latest' &&
+      resumeRuntimeLatest.count === 16 &&
+      resumeRuntimeLatest.applyRuntime === true,
+    'Expected /resume runtime latest <count> to enable saved runtime restore.'
+  );
+
+  const resumeRuntimeById = parseResumeRequest('/resume runtime 2026-04-08T08-54-23-747Z-l4o0ov');
+  assert(
+    resumeRuntimeById.sessionRef === '2026-04-08T08-54-23-747Z-l4o0ov' &&
+      resumeRuntimeById.count === 24 &&
+      resumeRuntimeById.applyRuntime === true,
+    'Expected /resume runtime <session-id> to parse correctly.'
   );
 
   console.log('[repl-smoke] All REPL command parsing checks passed.');

@@ -40,28 +40,39 @@ export function parseHistoryRequest(entry: string): { sessionRef?: string; count
   };
 }
 
-export function parseResumeRequest(entry: string): { sessionRef?: string; count: number } {
-  const args = entry
+export function parseResumeRequest(entry: string): {
+  sessionRef?: string;
+  count: number;
+  applyRuntime: boolean;
+} {
+  const rawArgs = entry
     .slice('/resume'.length)
     .trim()
     .split(/\s+/)
     .filter(Boolean);
+  const applyRuntime = rawArgs[0]?.toLowerCase() === 'runtime';
+  const args = applyRuntime ? rawArgs.slice(1) : rawArgs;
 
   if (args.length === 0) {
-    return { sessionRef: 'latest', count: 24 };
+    return { sessionRef: 'latest', count: 24, applyRuntime };
   }
 
   if (args.length === 1) {
     if (isWholeNumberText(args[0])) {
-      return { sessionRef: 'latest', count: parsePositiveCount(args[0], 24, 100) };
+      return {
+        sessionRef: 'latest',
+        count: parsePositiveCount(args[0], 24, 100),
+        applyRuntime,
+      };
     }
 
-    return { sessionRef: args[0], count: 24 };
+    return { sessionRef: args[0], count: 24, applyRuntime };
   }
 
   return {
     sessionRef: args[0],
     count: parsePositiveCount(args[1], 24, 100),
+    applyRuntime,
   };
 }
 

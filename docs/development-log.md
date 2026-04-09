@@ -625,3 +625,18 @@ Validation:
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke:sessions`
+
+### 2026-04-09 - Resume saved runtime
+
+Summary:
+
+- added `/resume runtime ...` so saved provider, model, workdir, and runtime flags can be restored together with the conversation
+- reused existing workdir validation so missing or unsafe saved workdirs are rejected instead of being restored blindly
+- expanded REPL/session smoke coverage for runtime-aware resume parsing and recap messaging
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:sessions`
+- `npm run smoke:repl`
