@@ -73,6 +73,7 @@ export type SessionsRequest =
   | {
       kind: 'compare';
       count: number;
+      includeIdle: boolean;
     }
   | {
       kind: 'search';
@@ -101,6 +102,7 @@ export function parseSessionsRequest(entry: string): SessionsRequest {
       return {
         kind: 'compare',
         count: 5,
+        includeIdle: false,
       };
     }
 
@@ -108,12 +110,29 @@ export function parseSessionsRequest(entry: string): SessionsRequest {
       return {
         kind: 'compare',
         count: parsePositiveCount(args[1], 5, 20),
+        includeIdle: false,
+      };
+    }
+
+    if (args.length === 2 && args[1]?.toLowerCase() === 'all') {
+      return {
+        kind: 'compare',
+        count: 5,
+        includeIdle: true,
+      };
+    }
+
+    if (args.length === 3 && args[1]?.toLowerCase() === 'all' && isWholeNumberText(args[2])) {
+      return {
+        kind: 'compare',
+        count: parsePositiveCount(args[2], 5, 20),
+        includeIdle: true,
       };
     }
 
     return {
       kind: 'invalid',
-      reason: 'Use /sessions compare [count].',
+      reason: 'Use /sessions compare [count] or /sessions compare all [count].',
     };
   }
 
@@ -158,7 +177,7 @@ export function parseSessionsRequest(entry: string): SessionsRequest {
   return {
     kind: 'invalid',
     reason:
-      'Use /sessions [count], /sessions compare [count], or /sessions search <query> [count]. For a specific session use /history <session-id> or /resume <session-id>.',
+      'Use /sessions [count], /sessions compare [count], /sessions compare all [count], or /sessions search <query> [count]. For a specific session use /history <session-id> or /resume <session-id>.',
   };
 }
 

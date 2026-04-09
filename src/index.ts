@@ -78,7 +78,9 @@ function printReplHelp(): void {
       '                       Replace the current conversation with saved user/assistant messages',
       '  /sessions [count]     Show recent saved sessions',
       '  /sessions compare [count]',
-      '                       Compare recent sessions by activity profile and event counts',
+      '                       Compare recent non-idle sessions by activity profile and event counts',
+      '  /sessions compare all [count]',
+      '                       Include idle sessions in the comparison view',
       '  /sessions search <query> [count]',
       '                       Search saved sessions by title, model, provider, workdir, or reason',
       '  /session [count]      Alias for /sessions',
@@ -395,7 +397,13 @@ async function main(): Promise<void> {
         }
 
         if (request.kind === 'compare') {
-          console.log(`\n${await renderSessionComparison(request.count, sessionStore.sessionId)}`);
+          console.log(
+            `\n${await renderSessionComparison(
+              request.count,
+              sessionStore.sessionId,
+              request.includeIdle
+            )}`
+          );
           continue;
         }
 

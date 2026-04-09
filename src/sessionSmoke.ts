@@ -118,6 +118,9 @@ async function main(): Promise<void> {
       expectedSessionsDir,
       '2026-12-31T23-59-59-998Z-schema-invalid.jsonl'
     );
+    const idleSessionId = '2026-04-08T00-00-00-000Z-idle-fixture';
+    const idleWorkdir = path.join(tempRoot, 'workspace-idle');
+    await mkdir(idleWorkdir, { recursive: true });
 
     console.log('[session-smoke] Created session store');
     console.log(`[session-smoke] sessionId: ${store.sessionId}`);
@@ -200,6 +203,7 @@ async function main(): Promise<void> {
       'null\n{"type":"session_started","sessionId":"broken"}\n',
       'utf8'
     );
+    await writeSessionFixture(expectedSessionsDir, idleSessionId, idleWorkdir, 'qwen2.5-coder:3b', 'startup');
 
     const sessionList = await renderSessionList(10, { currentSessionId: store.sessionId });
     console.log(`[session-smoke] rendered session list:\n${sessionList}\n`);
@@ -207,7 +211,7 @@ async function main(): Promise<void> {
     assertIncludesAll(
       sessionList,
       [
-        `Saved sessions (2)`,
+        `Saved sessions (3)`,
         `Root: ${expectedSessionsDir}`,
         'Warning: skipped 2 corrupted session logs and ignored malformed lines in 1 session log while scanning saved sessions.',
         `- id: ${store.sessionId} (current)`,
@@ -218,6 +222,10 @@ async function main(): Promise<void> {
         '  title: Show me the earlier session.',
         '  last active: ',
         `  provider=ollama, model=qwen2.5-coder:7b, workdir=${previousWorkdir}, reason=previous session smoke`,
+        `- id: ${idleSessionId}`,
+        '  title: (no prompt yet)',
+        '  last active: ',
+        `  provider=ollama, model=qwen2.5-coder:3b, workdir=${idleWorkdir}, reason=startup`,
       ],
       'rendered session list'
     );
@@ -245,6 +253,7 @@ async function main(): Promise<void> {
       comparison,
       [
         'Recent session comparison (2)',
+        'Latest first (idle hidden):',
         `- id: ${store.sessionId} (current)`,
         '  title: Summarize this project.',
         '  activity: user=1, assistant=1, repl commands=1, config=1, total=4',
@@ -255,10 +264,27 @@ async function main(): Promise<void> {
       ],
       'session comparison'
     );
+    if (comparison.includes(idleSessionId)) {
+      throw new Error('Default session comparison should hide idle sessions.');
+    }
+
+    const comparisonAll = await renderSessionComparison(5, store.sessionId, true);
+    assertIncludesAll(
+      comparisonAll,
+      [
+        'Recent session comparison (3)',
+        'Latest first (including idle):',
+        `- id: ${idleSessionId}`,
+        '  title: (no prompt yet)',
+        '  activity: user=0, assistant=0, repl commands=0, config=0, total=0',
+        '  profile: idle',
+      ],
+      'session comparison all'
+    );
 
     const recentSessions = await listRecentSessions(10);
-    if (recentSessions.length !== 2) {
-      throw new Error(`Expected 2 recent sessions, got ${recentSessions.length}.`);
+    if (recentSessions.length !== 3) {
+      throw new Error(`Expected 3 recent sessions, got ${recentSessions.length}.`);
     }
     const currentEntry = recentSessions.find((entry) => entry.sessionId === store.sessionId);
     if (!currentEntry) {
@@ -282,6 +308,14 @@ async function main(): Promise<void> {
       throw new Error(
         `Previous session lastActivityAt was not a valid timestamp: ${previousEntry.lastActivityAt}`
       );
+    }
+
+    const idleEntry = recentSessions.find((entry) => entry.sessionId === idleSessionId);
+    if (!idleEntry) {
+      throw new Error('Idle session was missing from recent session entries.');
+    }
+    if (idleEntry.title !== '(no prompt yet)') {
+      throw new Error(`Unexpected idle session title: ${idleEntry.title}`);
     }
 
     const latestPrevious = await resolveSessionEntry('latest', store.sessionId);

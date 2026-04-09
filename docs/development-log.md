@@ -513,6 +513,7 @@ Summary:
 
 - added `/sessions compare [count]` so recent sessions can be compared without opening them one by one
 - each comparison row now shows message, command, and config-change counts plus a lightweight activity profile such as `mixed`, `command-heavy`, or `chat-heavy`
+- changed the default comparison view to hide idle startup-only sessions, and added `/sessions compare all [count]` for the full comparison view
 - expanded the session smoke coverage so comparison output stays grounded in real saved events
 
 Validation:

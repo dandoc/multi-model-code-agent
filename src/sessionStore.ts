@@ -689,26 +689,48 @@ export async function renderSessionList(limit = 8, options: SessionListOptions =
 
 export async function renderSessionComparison(
   limit = 5,
-  currentSessionId?: string
+  currentSessionId?: string,
+  includeIdle = false
 ): Promise<string> {
   const sessionsDir = getSessionsDir();
-  const scan = await scanRecentSessions(limit);
-  const entries = scan.entries;
+  const scan = await scanRecentSessions(200);
+  const compared: Array<{ entry: SessionListEntry; summary: SessionActivitySummary }> = [];
 
-  if (entries.length === 0) {
-    const warning = renderScanWarning(scan, 'saved sessions');
-    return [warning, `No saved sessions found under ${sessionsDir}`].filter(Boolean).join('\n');
+  for (const entry of scan.entries) {
+    const loaded = await loadSessionEvents(entry.sessionPath);
+    const summary = summarizeSessionActivity(loaded.events);
+    if (!includeIdle && summary.profile === 'idle') {
+      continue;
+    }
+    compared.push({ entry, summary });
+    if (compared.length >= limit) {
+      break;
+    }
   }
 
-  const lines = [`Recent session comparison (${entries.length})`, `Root: ${sessionsDir}`, 'Latest first:'];
+  if (compared.length === 0) {
+    const warning = renderScanWarning(scan, 'saved sessions');
+    return [
+      warning,
+      includeIdle
+        ? `No saved sessions found under ${sessionsDir}`
+        : `No non-idle saved sessions found under ${sessionsDir}. Use /sessions compare all to include idle sessions.`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  const lines = [
+    `Recent session comparison (${compared.length})`,
+    `Root: ${sessionsDir}`,
+    includeIdle ? 'Latest first (including idle):' : 'Latest first (idle hidden):',
+  ];
   const warning = renderScanWarning(scan, 'saved sessions');
   if (warning) {
     lines.push(warning);
   }
 
-  for (const entry of entries) {
-    const loaded = await loadSessionEvents(entry.sessionPath);
-    const summary = summarizeSessionActivity(loaded.events);
+  for (const { entry, summary } of compared) {
     const currentLabel = entry.sessionId === currentSessionId ? ' (current)' : '';
 
     lines.push(`- id: ${entry.sessionId}${currentLabel}`);

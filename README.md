@@ -114,6 +114,7 @@ npm run dev
 - `/resume <session-id> [count]`
 - `/sessions [count]`
 - `/sessions compare [count]`
+- `/sessions compare all [count]`
 - `/sessions search <query> [count]`
 - `/session [count]`
 - `/tools`
@@ -162,7 +163,8 @@ Each REPL session now writes a small JSONL log so you can inspect recent activit
 - override location: set `MM_AGENT_HOME`
 - sensitive values such as `/api-key ...` are redacted before they are written
 - use `/sessions` to list recent saved session ids
-- use `/sessions compare` to compare the latest sessions by message count, command count, config changes, and a simple activity profile
+- use `/sessions compare` to compare the latest non-idle sessions by message count, command count, config changes, and a simple activity profile
+- use `/sessions compare all` if you also want to include idle startup-only sessions in the comparison view
 - use `/sessions search <query>` or `/sessions find <query>` to filter saved sessions by title, provider, model, workdir, or reason
 - `/session` is a short alias for `/sessions`
 - `/sessions` now shows a short title from the first saved user prompt and the last activity time, so similar sessions are easier to tell apart

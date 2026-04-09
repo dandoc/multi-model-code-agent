@@ -60,8 +60,18 @@ async function main(): Promise<void> {
 
   const sessionsCompare = parseSessionsRequest('/sessions compare 6');
   assert(
-    sessionsCompare.kind === 'compare' && sessionsCompare.count === 6,
+    sessionsCompare.kind === 'compare' &&
+      sessionsCompare.count === 6 &&
+      sessionsCompare.includeIdle === false,
     'Expected /sessions compare <count> to parse as a comparison request.'
+  );
+
+  const sessionsCompareAll = parseSessionsRequest('/sessions compare all 4');
+  assert(
+    sessionsCompareAll.kind === 'compare' &&
+      sessionsCompareAll.count === 4 &&
+      sessionsCompareAll.includeIdle === true,
+    'Expected /sessions compare all <count> to include idle sessions.'
   );
 
   const sessionsInvalid = parseSessionsRequest('/sessions 2026-04-08T08-54-23-747Z-l4o0ov');
