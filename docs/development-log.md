@@ -718,7 +718,7 @@ Validation:
 
 Summary:
 
-- tightened project-framing language so the docs describe inspiration from Claude Code workflow and observable behavior, not use of Claude Code source code
+- tightened project-framing language so the docs describe inspiration from Claude Code workflow and observable behavior, not use of Claude Code internal implementation
 - replaced wording that could be misread as direct source-code reuse with safer wording around methodology, inspiration, and independent implementation
 
 Validation:
