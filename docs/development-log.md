@@ -33,6 +33,22 @@ Validation:
 - `npm run smoke:release-closeout`
 - `npm run smoke:closeout -- --skip-live`
 
+### 2026-04-10 - Milestone 4 closeout status update
+
+Summary:
+
+- marked Milestone 4 as complete after validating both primary runtime paths through the scripted closeout flow
+- updated the runtime support matrix so the release flow now prefers `npm run smoke:closeout`
+- recorded that the primary Windows paths completed manual release sanity checks as well
+
+Validation:
+
+- `npm run smoke:closeout`
+- `npm run smoke:closeout -- --scope codex --mode all`
+- `npm link`
+- `mm-agent --version`
+- `mm-agent --help`
+
 ## 2026-04-07
 
 ### 초기 MVP 부트스트랩

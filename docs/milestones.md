@@ -80,9 +80,9 @@ Completed:
 - session/profile smoke coverage and corrupted-log hardening
 
 ### Milestone 4. Multi-model hardening
-Status: in progress (late stage)
+Status: complete
 
-Completed so far:
+Completed:
 
 - `/models search`
 - `/models doctor`
@@ -100,15 +100,14 @@ Completed so far:
   - `/temperature`
   - `/max-turns`
   - `/request-timeout`
-
-Still remaining:
-
-- more real-provider validation across the exact model mixes we use day to day
-- additional provider-specific recovery cases if new failures appear in real use
-- milestone/document cleanup for the final Milestone 4 closeout
+- primary-path closeout validation:
+  - `Ollama + qwen3-coder:30b` on Windows
+  - `Codex CLI + gpt-5.4` on Windows
+- scripted release closeout path:
+  - `npm run smoke:closeout`
 
 ### Milestone 5. CLI polish and release readiness
-Status: in progress
+Status: in progress (late stage)
 
 Completed so far:
 
@@ -121,16 +120,24 @@ Completed so far:
 - release checklist documentation
 - supported runtime matrix documentation
 - `smoke:release` for release-readiness closeout
+- `--version` and `/version`
+- package metadata cleanup for the public GitHub repository
+- combined `smoke:closeout` runner
+- manual release sanity checks:
+  - `npm link`
+  - `mm-agent --version`
+  - `mm-agent --help`
+  - REPL sanity pass for `/help`, `/status`, `/models doctor`, `/profiles`, `/sessions`
 
 Still remaining:
 
-- final output consistency polish across remaining commands
+- final output consistency polish across remaining commands if new rough edges appear in real use
+- decide when to stamp the first formal release candidate
 - optional TUI/GUI preparation after CLI output contracts settle
 
 ## Current focus
 
 The project is no longer blocked on basic agent capability. The current work is about making the CLI easier to use, easier to trust, and easier to ship:
 
-- finish Milestone 4 closeout
 - finish Milestone 5 release-readiness work
 - keep locking real regressions into smoke tests as they appear

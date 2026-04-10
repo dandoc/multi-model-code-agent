@@ -47,6 +47,12 @@ npm run smoke:release
 npm run smoke:live -- current all
 ```
 
+For the current release flow, prefer the combined closeout command:
+
+```bash
+npm run smoke:closeout
+```
+
 If the current runtime is not one of the primary paths, use `/models doctor` and `/models smoke` to decide whether the path is healthy enough for the current session.
 
 ## Notes
@@ -54,3 +60,4 @@ If the current runtime is not one of the primary paths, use `/models doctor` and
 - This matrix describes the current CLI repository, not the future Electron GUI app.
 - The matrix can evolve as real usage shifts.
 - New providers or models should not be promoted to `Primary` without both documentation and regression coverage.
+- Both primary paths have now been validated through the scripted closeout flow plus manual release sanity checks.

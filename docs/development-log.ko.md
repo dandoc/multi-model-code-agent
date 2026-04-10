@@ -35,6 +35,22 @@
 - `npm run smoke:release-closeout`
 - `npm run smoke:closeout -- --skip-live`
 
+### 마일스톤 4 closeout 상태 반영
+
+요약:
+
+- scripted closeout으로 두 개의 primary runtime 경로를 검증한 뒤 마일스톤 4를 완료로 올림
+- 릴리스 흐름이 `npm run smoke:closeout` 중심으로 보이도록 runtime support matrix를 갱신
+- Windows 주력 경로에서 수동 release sanity check까지 끝났다는 점을 기록
+
+검증:
+
+- `npm run smoke:closeout`
+- `npm run smoke:closeout -- --scope codex --mode all`
+- `npm link`
+- `mm-agent --version`
+- `mm-agent --help`
+
 ## 2026-04-07
 
 ### 초기 MVP 부트스트랩

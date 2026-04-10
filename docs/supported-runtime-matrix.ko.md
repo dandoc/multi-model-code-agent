@@ -47,6 +47,12 @@ npm run smoke:release
 npm run smoke:live -- current all
 ```
 
+현재 릴리스 흐름에서는 다음 합쳐진 closeout 명령을 우선 사용합니다.
+
+```bash
+npm run smoke:closeout
+```
+
 현재 runtime이 Primary 경로가 아니라면, `/models doctor`와 `/models smoke`로 이번 세션에서 충분히 건강한지 먼저 판단합니다.
 
 ## 참고
@@ -54,3 +60,4 @@ npm run smoke:live -- current all
 - 이 매트릭스는 미래 Electron GUI 앱이 아니라 현재 CLI 저장소 기준입니다.
 - 실사용 흐름이 바뀌면 매트릭스도 같이 바뀔 수 있습니다.
 - 새로운 provider나 모델을 `Primary`로 올릴 때는 문서와 regression coverage가 같이 따라와야 합니다.
+- 현재 두 개의 primary 경로는 scripted closeout과 수동 release sanity check까지 확인된 상태입니다.
