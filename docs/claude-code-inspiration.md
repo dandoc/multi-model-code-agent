@@ -1,4 +1,5 @@
 # Claude Code Inspiration
+Language: **English** | [한국어](claude-code-inspiration.ko.md)
 
 ## Why this document exists
 

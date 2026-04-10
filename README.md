@@ -1,4 +1,5 @@
 # Multi Model Code Agent
+Language: **English** | [한국어](README.ko.md)
 
 `multi-model-code-agent` is a small TypeScript CLI that gives you a Claude Code style workflow with pluggable backends.
 

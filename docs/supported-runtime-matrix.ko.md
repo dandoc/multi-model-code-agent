@@ -1,4 +1,5 @@
 # 지원 runtime 매트릭스
+언어: [English](supported-runtime-matrix.md) | **한국어**
 
 이 문서는 현재 CLI 프로젝트에서 어떤 runtime 조합을 `Primary`, `Secondary`, `Experimental`로 보는지 설명합니다.
 

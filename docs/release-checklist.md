@@ -1,4 +1,5 @@
 # Release Checklist
+Language: **English** | [한국어](release-checklist.ko.md)
 
 This checklist is the release-readiness gate for the current CLI repository.
 

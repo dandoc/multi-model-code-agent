@@ -1,4 +1,5 @@
 # Claude Code 영감 문서
+언어: [English](claude-code-inspiration.md) | **한국어**
 
 ## 이 문서의 목적
 

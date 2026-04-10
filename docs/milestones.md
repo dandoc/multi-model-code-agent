@@ -1,4 +1,5 @@
 # Project Milestones
+Language: **English** | [한국어](milestones.ko.md)
 
 ## Vision
 

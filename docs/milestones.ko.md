@@ -1,4 +1,5 @@
 # 프로젝트 마일스톤
+언어: [English](milestones.md) | **한국어**
 
 ## 비전
 
