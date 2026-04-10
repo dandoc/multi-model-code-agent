@@ -211,6 +211,9 @@ function buildShellFallbackPlan(
   command: string,
   mode: RunShellMode
 ): { shell: RunShellMode; command: string; reason: string } | null {
+  // Automatic shell fallback only handles the narrow Windows cases we can recover confidently:
+  // PowerShell syntax run in cmd/default shells, and GUI-style launch patterns that map cleanly to
+  // Start-Process.
   if (process.platform !== 'win32' || mode === 'powershell') {
     return null;
   }
@@ -1452,6 +1455,8 @@ async function runFiles(args: Record<string, unknown>, context: ToolContext): Pr
     throw new Error('No matching files were found to run.');
   }
 
+  // Each target is executed independently so the result view can explain mixed success/failure
+  // runs instead of collapsing everything into one shell transcript.
   const results: RunFilesResult[] = [];
   for (const target of targets) {
     results.push(await executeRunFilesTarget(context.config.workdir, target, timeoutMs));
@@ -1490,6 +1495,8 @@ async function runWritePatch(args: Record<string, unknown>, context: ToolContext
     const writtenPaths: typeof plan.writes = [];
 
     try {
+      // Validation happens before disk writes, but once writes start we still keep enough original
+      // state to roll earlier files back if a later write fails.
       for (const write of plan.writes) {
         try {
           await mkdir(path.dirname(write.absolutePath), { recursive: true });
@@ -1651,6 +1658,8 @@ async function runShell(args: Record<string, unknown>, context: ToolContext): Pr
 
     if (fallbackPlan) {
       const fallbackLabel = renderShellLabel(fallbackPlan.shell);
+      // A successful fallback should still preserve the original failure context so users can tell
+      // what happened instead of only seeing the retried command.
       context.log(
         `Command failed in ${shellLabel}; retrying once in ${fallbackLabel} with automatic fallback.`
       );
@@ -1739,6 +1748,8 @@ async function runShell(args: Record<string, unknown>, context: ToolContext): Pr
 }
 
 export function createTools(): ToolDefinition[] {
+  // The tool registry is the contract shared by the system prompt, approval UX, and execution
+  // layer, so every callable tool is declared in one place.
   return [
     {
       name: 'summarize_project',

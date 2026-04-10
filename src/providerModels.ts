@@ -131,6 +131,8 @@ export function normalizeProviderBaseUrl(provider: ModelProvider, input: string)
     return '';
   }
 
+  // Users often paste a full endpoint URL instead of the provider root. We trim the common suffixes
+  // here so the rest of the runtime can consistently treat baseUrl as the provider root.
   let normalized = input.trim().replace(/\/+$/, '');
   if (!normalized) {
     return normalized;
@@ -500,6 +502,8 @@ async function buildProviderDiagnostics(
   provider: ModelProvider,
   deps: ProviderDiagnosticDeps = {}
 ): Promise<ProviderDiagnostics> {
+  // Doctor output is intentionally provider-specific so setup issues point to the next likely fix
+  // instead of collapsing into one generic "request failed" message.
   const runtime = resolveProviderRuntime(config, provider);
   const currentModel = runtime.model.trim();
   const baseUrl = runtime.baseUrl.trim();
@@ -811,6 +815,8 @@ export async function buildRuntimeTransitionPreflight(
   nextConfig: AgentConfig,
   deps: RuntimePreflightDeps = {}
 ): Promise<RuntimeTransitionPreflight> {
+  // Preflight is lighter-weight than doctor: it tries to warn about the next broken request before
+  // we commit to a runtime switch, but it does not block on every soft issue.
   const issues: RuntimePreflightIssue[] = [];
   const currentModel = nextConfig.model.trim();
   const baseUrl = nextConfig.baseUrl.trim();
@@ -934,6 +940,8 @@ export function renderRuntimeTransitionPreflight(
   nextConfig: AgentConfig,
   preflight: RuntimeTransitionPreflight
 ): string {
+  // Preflight output is shared by direct runtime edits, profile loads, and runtime-aware resume, so
+  // the user sees one stable warning format before any reset happens.
   const lines = [
     'Runtime transition preflight',
     `target       provider=${nextConfig.provider}, model=${nextConfig.model || '(provider default)'}, workdir=${nextConfig.workdir}`,

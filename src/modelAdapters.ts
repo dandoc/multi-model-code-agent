@@ -84,6 +84,9 @@ function isRetryableFetchError(error: unknown): boolean {
   ]);
 }
 
+// Providers get one automatic retry only for transient transport-ish failures or retryable HTTP
+// statuses. This keeps noisy local/remote hiccups from surfacing immediately without hiding real
+// auth/model/configuration bugs behind repeated retries.
 async function retryProviderRequest<T>(
   fn: (attempt: number) => Promise<T>,
   shouldRetryResult: (value: T) => boolean
@@ -136,6 +139,8 @@ function getCodexEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
+// On Windows the Codex CLI is usually started behind a shell wrapper, so timeout cleanup has to
+// kill the whole process tree instead of only the wrapper PID.
 export async function terminateChildProcessTree(child: ChildProcess): Promise<void> {
   const pid = child.pid;
   if (!pid) {
@@ -226,6 +231,8 @@ function extractCodexMessage(stdout: string): string {
   return lastAgentMessage.trim();
 }
 
+// We keep Codex execution behind one helper so timeout handling, wrapper spawning, and stdout/stderr
+// capture behave the same for login checks and real completions.
 async function runCodexCommand(
   args: string[],
   input: string,
@@ -531,6 +538,8 @@ class OllamaAdapter implements ModelAdapter {
   readonly provider = 'ollama' as const;
 
   async complete(messages: ChatMessage[], config: AgentConfig): Promise<string> {
+    // Ollama stays on the simple non-streaming chat path here so retries and smoke tests can reason
+    // about one request/one response without stream assembly in the middle.
     const response = await retryProviderRequest(
       async () =>
         await fetch(`${config.baseUrl}/api/chat`, {
@@ -614,6 +623,8 @@ class CodexCliAdapter implements ModelAdapter {
   readonly provider = 'codex' as const;
 
   async complete(messages: ChatMessage[], config: AgentConfig): Promise<string> {
+    // Codex is driven through the local CLI, so we retry only timeout-shaped failures and leave
+    // login/configuration errors alone.
     await ensureCodexLogin(config);
 
     const args = [

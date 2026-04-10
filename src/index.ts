@@ -315,6 +315,8 @@ function ensureProviderReady(config: AgentConfig): void {
   }
 }
 
+// main wires the reusable engine pieces into one interactive CLI: config loading, session logging,
+// runtime switching, REPL command dispatch, and one-shot prompt execution.
 async function main(): Promise<void> {
   const launchCwd = process.cwd();
   loadDotEnv(launchCwd);
@@ -345,6 +347,7 @@ async function main(): Promise<void> {
 
   const agent = new AgentRunner(config, adapter, tools, ui);
 
+  // Session logging should never make the CLI unusable, so write failures degrade to warnings.
   const logSessionEvent = async (action: () => Promise<void>): Promise<void> => {
     try {
       await action();
@@ -354,6 +357,8 @@ async function main(): Promise<void> {
     }
   };
 
+  // Launch-time settings are persisted through .env so the next CLI start matches the user's last
+  // selected provider/model/base URL defaults.
   const persistLaunchSettings = async (updates: Record<string, string>): Promise<boolean> => {
     try {
       await updateDotEnv(launchCwd, updates);
@@ -368,6 +373,8 @@ async function main(): Promise<void> {
     }
   };
 
+  // Rebuilding the runtime swaps the adapter/config pair in place and only resets conversation
+  // state when a command is explicitly changing the session semantics.
   const rebuildRuntime = (nextConfig: AgentConfig, resetConversation: boolean): void => {
     config = nextConfig;
     adapter = createModelAdapter(config);
@@ -379,6 +386,8 @@ async function main(): Promise<void> {
     }
   };
 
+  // Preflight is advisory for direct runtime edits and confirmable for heavier transitions like
+  // profile loads or runtime-aware resume.
   const runRuntimeTransitionPreflight = async (
     nextConfig: AgentConfig,
     options?: {
@@ -403,6 +412,8 @@ async function main(): Promise<void> {
     return confirmed;
   };
 
+  // runPrompt is the single path for free-form user prompts in both one-shot mode and the REPL, so
+  // provider readiness checks and failure rendering stay consistent.
   const runPrompt = async (text: string): Promise<boolean> => {
     const runtimeAnswer = answerRuntimeConfigQuestion(text, config);
     console.log(`\n[user] ${text}`);
@@ -446,6 +457,7 @@ async function main(): Promise<void> {
         continue;
       }
 
+      // Slash commands mutate runtime/session state locally; plain text goes through the model loop.
       if (!entry.startsWith('/')) {
         await runPrompt(entry);
         continue;

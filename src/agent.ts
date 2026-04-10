@@ -162,6 +162,8 @@ function matchesAnyKeyword(userInput: string, keywords: string[]): boolean {
   return keywords.some((keyword) => normalized.includes(keyword.toLowerCase()));
 }
 
+// AgentRunner owns one conversational loop and all of the guardrails around it:
+// deterministic bootstraps, approval prompts, grounding checks, and corrective retries.
 export class AgentRunner {
   private history: ChatMessage[] = [];
   private toolMap: Map<ToolDefinition['name'], ToolDefinition>;
@@ -304,6 +306,8 @@ export class AgentRunner {
     return [...new Set(anchors.map((value) => this.normalizeComparablePath(value)))];
   }
 
+  // Repo-analysis answers are only considered grounded enough when they cite the concrete files
+  // a human would expect us to have actually inspected.
   private needsMoreGroundedAnswer(userInput: string, text: string): boolean {
     const fileReferenceCount = this.countFileReferences(text);
     const normalizedText = text.replace(/\\/g, '/').toLowerCase();
@@ -401,6 +405,8 @@ export class AgentRunner {
     ).length;
   }
 
+  // Tool execution is the only place that can create real side effects, so approvals and success
+  // bookkeeping live together here.
   private async executeTool(
     tool: ToolDefinition,
     args: Record<string, unknown>
@@ -516,6 +522,8 @@ export class AgentRunner {
     return `Approve ${tool.name} with arguments ${JSON.stringify(args)}?`;
   }
 
+  // Bootstrap tools feed deterministic repo facts into the conversation before the model answers
+  // common high-stakes questions about structure, config, and entrypoints.
   private async bootstrapContext(
     userInput: string,
     toolName: ToolDefinition['name'],
@@ -1363,6 +1371,8 @@ export class AgentRunner {
     await this.maybeBootstrapEntrypointContext(userInput);
     await this.maybeBootstrapConfigContext(userInput);
 
+    // These counters keep retries bounded and let us escalate to a deterministic fallback once the
+    // same class of model failure repeats.
     let invalidResponseCount = 0;
     let malformedStructuredResponseCount = 0;
     let unusableResponseCount = 0;
@@ -1370,6 +1380,7 @@ export class AgentRunner {
     let styleRewriteCount = 0;
     let creationRefusalCount = 0;
     let creationNoToolCount = 0;
+    // Completion claims only count if they happen after a successful write in this turn.
     const initialWritePatchCount = this.countSuccessfulToolExecutions('write_patch');
 
     for (let step = 1; step <= this.config.maxTurns; step += 1) {
@@ -1382,6 +1393,8 @@ export class AgentRunner {
       });
 
       if (envelope.type === 'message') {
+        // Final-answer retries are intentionally ordered from protocol hygiene to malformed payloads
+        // to empty answers to grounding/style fixes.
         if (this.isInvalidFinalResponse(rawResponse)) {
           invalidResponseCount += 1;
           const fallback = this.buildDeterministicFallback(userInput);

@@ -173,6 +173,8 @@ function buildSection(title: string, lines: Array<string | undefined>): string[]
   return [title, ...content.map((line) => `- ${line}`)];
 }
 
+// Profile diffs are the shared source of truth for "show", "diff", and "load preview" so users
+// see the same runtime delta before they actually reset the conversation.
 function collectProfileDiff(currentConfig: AgentConfig, profile: SavedProfile): ProfileDiffField[] {
   const fields: ProfileDiffField[] = [];
 
@@ -254,6 +256,8 @@ async function withProfilesLock<T>(action: () => Promise<T>): Promise<T> {
   const lockDir = `${getProfilesPath()}.lock`;
   const startedAt = Date.now();
 
+  // Profile saves/deletes rewrite one shared JSON file, so a lock directory keeps concurrent REPLs
+  // from silently overwriting each other's updates.
   while (true) {
     try {
       await mkdir(lockDir);
@@ -288,6 +292,7 @@ async function writeProfilesFile(profiles: SavedProfile[]): Promise<void> {
     version: 1,
     profiles: [...profiles].sort((left, right) => compareProfileNames(left.name, right.name)),
   };
+  // Temp-file + rename keeps readers from seeing a half-written profiles file.
   await writeFile(tempPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
   await rename(tempPath, profilesPath);
 }
@@ -407,6 +412,8 @@ export function renderProfileLoadPreview(currentConfig: AgentConfig, profile: Sa
     }
   }
 
+  // Load preview intentionally ends with the side effect, because the conversation reset is the
+  // main behavioral change users need to confirm before applying a profile.
   lines.push('', ...buildSection('Effect', ['Loading a profile resets the current conversation.']));
   return lines.join('\n');
 }

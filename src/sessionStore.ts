@@ -308,6 +308,8 @@ function isLowSignalSessionMessage(content: string): boolean {
 }
 
 function deriveSessionTitle(events: SessionEvent[], reason: string): string {
+  // Titles prefer explicit overrides, then meaningful user text, then meaningful commands, so
+  // browsing stays useful even for short-lived sessions.
   const latestTitleOverride = [...events]
     .reverse()
     .find(
@@ -359,6 +361,8 @@ function deriveEffectiveSessionConfig(events: SessionEvent[]): SessionConfigSnap
     return undefined;
   }
 
+  // Runtime-aware resume/status views should reflect the last saved config event, not only the
+  // launch-time snapshot written when the session started.
   const latestConfigEvent = [...events]
     .reverse()
     .find(
@@ -395,6 +399,8 @@ async function loadSessionEvents(sessionPath: string): Promise<SessionEventsLoad
   const events: SessionEvent[] = [];
   let malformedLineCount = 0;
 
+  // JSONL is append-oriented, so a crash can leave the last line truncated. We keep every readable
+  // event and count malformed lines instead of poisoning the whole session file.
   for (const line of lines) {
     try {
       const parsed = JSON.parse(line) as unknown;
@@ -823,6 +829,8 @@ export async function planSessionPrune(
   const scan = await scanRecentSessions();
   const keep = new Set<string>();
 
+  // Prune must scan the full saved-session set so "keep the latest N" stays true even when the
+  // history grows far beyond the default browsing window.
   for (const entry of scan.entries.slice(0, Math.max(1, keepCount))) {
     keep.add(entry.sessionId);
   }
@@ -856,6 +864,8 @@ export async function resolveSessionEntry(
   const normalized = specifier.trim();
   if (isSafeSessionSpecifier(normalized)) {
     const directSessionPath = buildSessionPath(normalized);
+    // Exact ids are resolved directly so older sessions stay reachable even when normal browsing is
+    // limited to a recent scan window.
     if (existsSync(directSessionPath)) {
       const directEntry = await loadSessionEntry(directSessionPath);
       if (!directEntry.entry) {
@@ -1052,6 +1062,7 @@ export async function renderSessionSummary(sessionPath: string, limit = 5): Prom
   const lastUserMessage = findLastUserMessage(events);
   const lastAssistantMessage = findLastAssistantMessage(events);
   const lastMeaningfulCommand = findLastMeaningfulCommand(events);
+  // Summary keeps the metadata dense and only shows a short recent tail of user-visible events.
   const visibleEvents = events.filter((event) => event.type !== 'session_started').slice(-limit);
 
   const lines = [
@@ -1238,6 +1249,8 @@ export async function loadSessionConversation(
   const lastUserMessage = findLastUserMessage(loaded.events);
   const lastAssistantMessage = findLastAssistantMessage(loaded.events);
   const lastMeaningfulCommand = findLastMeaningfulCommand(loaded.events);
+  // Resume restores only conversational messages; commands/config/title events still contribute to
+  // metadata and activity summaries but are not replayed into the model history.
   const messages = messageEvents
     .slice(-Math.max(1, limit))
     .map((event) => ({
@@ -1305,6 +1318,8 @@ export function renderResumeContext(
     runtimeApplied?: boolean;
   }
 ): string {
+  // The recap is meant to answer "what did I just load?" before the next prompt, especially when
+  // conversation and runtime restoration are intentionally decoupled.
   const sourceSummary = `Source session: provider=${
     loadedConversation.provider ?? '(unknown)'
   }, model=${
@@ -1368,6 +1383,8 @@ export function renderRuntimeStatus(
   sessionPath: string,
   resumeSourceSessionId?: string
 ): string {
+  // Status mirrors the session-summary layout so users can scan one consistent structure whether
+  // they are inspecting current runtime or a saved session.
   const baseUrl =
     currentConfig.provider === 'codex' ? '(managed by codex CLI)' : currentConfig.baseUrl;
 

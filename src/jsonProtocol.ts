@@ -5,6 +5,8 @@ function extractFencedJson(text: string): string | null {
   return match?.[1]?.trim() ?? null;
 }
 
+// Many models wrap the real payload in prose or fences. This scanner pulls out the first balanced
+// JSON object/array without assuming the whole response is valid JSON already.
 function extractBalancedJson(text: string): string | null {
   let start = -1;
   const stack: string[] = [];
@@ -260,6 +262,8 @@ function parseEnvelopeCandidate(candidate: string): AgentEnvelope | null {
 }
 
 function parseEnvelopeRecord(parsed: Record<string, unknown>): AgentEnvelope | null {
+  // We accept several real-world envelope shapes here because local and remote models frequently
+  // drift between direct tool calls, OpenAI-style function calls, and partially normalized wrappers.
   if (parsed.type === 'message' && parsed.message !== undefined) {
     if (typeof parsed.message === 'string') {
       return {
@@ -334,6 +338,8 @@ function parseEnvelopeRecord(parsed: Record<string, unknown>): AgentEnvelope | n
 
 export function parseAgentEnvelope(rawText: string): AgentEnvelope {
   const cleaned = rawText.trim();
+  // Try the most structured candidates first, then degrade to a plain message so the agent loop can
+  // decide whether to retry, recover, or show the text as-is.
   const candidates = [
     extractFencedJson(cleaned),
     extractBalancedJson(cleaned),
