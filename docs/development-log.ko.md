@@ -20,6 +20,21 @@
 - `npm run smoke:packaging`
 - `npm run smoke:repl`
 
+### 릴리스 closeout 명령 추가
+
+요약:
+
+- 스크립트형 릴리스 게이트와 현재 provider live smoke를 한 번에 돌리는 `npm run smoke:closeout` 추가
+- closeout runner 자체를 non-live로 검증하는 `src/releaseCloseoutSmoke.ts` 추가
+- README와 릴리스 체크리스트를 합쳐진 closeout 경로 기준으로 정리
+
+검증:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:release-closeout`
+- `npm run smoke:closeout -- --skip-live`
+
 ## 2026-04-07
 
 ### 초기 MVP 부트스트랩

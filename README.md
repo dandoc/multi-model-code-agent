@@ -153,6 +153,7 @@ Notes:
 - `package.json` is still marked `private`, so this is a local install/release-readiness path, not an npm publish workflow yet
 - run `npm run smoke:packaging` to verify the built CLI entrypoint and `--help` path
 - run `npm run smoke:release` for the tighter release-readiness gate used for CLI closeout
+- run `npm run smoke:closeout` to execute the scripted release gate plus the current-provider live smoke path in one step
 - see `docs/release-checklist.md` for the full manual + scripted release gate
 
 ## Supported real-world combinations
@@ -256,6 +257,12 @@ For release-readiness instead of the full broad smoke chain, use:
 
 ```bash
 npm run smoke:release
+```
+
+Or use the scripted closeout path that also runs the current-provider live smoke:
+
+```bash
+npm run smoke:closeout
 ```
 
 That tighter gate runs:

@@ -154,6 +154,7 @@ mm-agent --help
 - 아직 `package.json`은 `private` 상태이므로, 지금 단계는 npm publish가 아니라 로컬 설치 및 릴리스 준비 경로입니다
 - `npm run smoke:packaging`으로 build된 CLI 엔트리포인트와 `--help` 경로를 검증할 수 있습니다
 - `npm run smoke:release`는 CLI 마감에 쓰는 더 촘촘한 릴리스 준비 게이트입니다
+- `npm run smoke:closeout`은 스크립트형 릴리스 게이트와 현재 provider live smoke를 한 번에 실행합니다
 - 전체 수동/자동 체크 항목은 `docs/release-checklist.ko.md`에 정리합니다
 
 ## 현재 실사용 지원 조합
@@ -236,6 +237,12 @@ npm run smoke
 
 ```bash
 npm run smoke:release
+```
+
+현재 provider live smoke까지 같이 포함한 scripted closeout 경로를 쓰려면:
+
+```bash
+npm run smoke:closeout
 ```
 
 이 경로는 다음을 실행합니다.

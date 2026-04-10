@@ -18,6 +18,21 @@ Validation:
 - `npm run smoke:packaging`
 - `npm run smoke:repl`
 
+### 2026-04-10 - Release closeout command
+
+Summary:
+
+- added `npm run smoke:closeout` as a single entrypoint for the scripted release gate plus the current-provider live smoke path
+- added `src/releaseCloseoutSmoke.ts` so the closeout runner itself has non-live regression coverage
+- updated the README and release checklist docs so release closeout can be triggered by one combined command
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:release-closeout`
+- `npm run smoke:closeout -- --skip-live`
+
 ## 2026-04-07
 
 ### 초기 MVP 부트스트랩

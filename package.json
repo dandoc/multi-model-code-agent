@@ -32,6 +32,7 @@
     "typecheck": "tsc --noEmit",
     "smoke": "npm run smoke:core && npm run smoke:paths && npm run smoke:sessions && npm run smoke:profiles && npm run smoke:models && npm run smoke:adapters && npm run smoke:run-files && npm run smoke:shells && npm run smoke:approvals && npm run smoke:packaging && npm run smoke:repl && npm run smoke:json-protocol && npm run smoke:regressions && npm run smoke:live-matrix",
     "smoke:release": "npm run typecheck && npm run build && npm run smoke:packaging && npm run smoke:approvals && npm run smoke:repl && npm run smoke:models && npm run smoke:live-matrix",
+    "smoke:closeout": "tsx src/releaseCloseout.ts",
     "smoke:core": "tsx src/smoke.ts",
     "smoke:failures": "tsx src/writePatchFailureSmoke.ts",
     "smoke:batch": "tsx src/writePatchBatchSmoke.ts",
@@ -46,6 +47,7 @@
     "smoke:run-files": "tsx src/runFilesSmoke.ts",
     "smoke:approvals": "tsx src/approvalSmoke.ts",
     "smoke:packaging": "tsx src/packagingSmoke.ts",
+    "smoke:release-closeout": "tsx src/releaseCloseoutSmoke.ts",
     "smoke:json-protocol": "tsx src/jsonProtocolSmoke.ts",
     "smoke:shells": "tsx src/shellSmoke.ts",
     "smoke:regressions": "tsx src/regressionSmoke.ts"

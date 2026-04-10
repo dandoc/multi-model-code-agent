@@ -49,6 +49,12 @@ npm run smoke:release
 npm run smoke:live -- current all
 ```
 
+또는 합쳐진 scripted closeout 경로를 실행합니다.
+
+```bash
+npm run smoke:closeout
+```
+
 ## 수동 확인 항목
 
 스크립트 smoke 외에도 아래를 한 번 확인합니다.

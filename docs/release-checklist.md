@@ -49,6 +49,12 @@ For the currently selected real provider, also run:
 npm run smoke:live -- current all
 ```
 
+Or use the combined scripted closeout path:
+
+```bash
+npm run smoke:closeout
+```
+
 ## Manual checks
 
 Run these checks in addition to the scripted smoke path:
