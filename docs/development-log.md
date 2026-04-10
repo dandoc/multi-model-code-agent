@@ -3,6 +3,21 @@ Language: **English** | [한국어](development-log.ko.md)
 
 이 문서는 프로젝트의 중요한 변화, 방향 전환, 알려진 문제를 계속 기록하는 용도다. 의미 있는 기능 추가나 중요한 판단이 생기면 이 파일도 함께 업데이트한다.
 
+### 2026-04-10 - Sectioned model/runtime outputs
+
+Summary:
+
+- reorganized model catalog output into `Overview`, `Available models`, `Match hints`, and `Notes` sections
+- reorganized provider doctor output into `Overview` and `Checks` sections
+- reorganized runtime transition preflight output into `Target` and `Checks` sections so it matches the newer session/profile layouts
+
+Validation:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:models`
+- `npm run smoke`
+
 ### 2026-04-10 - CLI version command and package metadata
 
 Summary:

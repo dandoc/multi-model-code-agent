@@ -5,6 +5,21 @@
 
 ## 2026-04-10
 
+### 모델/런타임 출력 섹션 정리
+
+요약:
+
+- 모델 카탈로그 출력을 `Overview`, `Available models`, `Match hints`, `Notes` 섹션으로 재구성
+- provider doctor 출력을 `Overview`, `Checks` 섹션으로 재구성
+- runtime transition preflight 출력도 `Target`, `Checks` 섹션으로 맞춰서 세션/프로필 출력과 톤을 통일
+
+검증:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:models`
+- `npm run smoke`
+
 ### CLI 버전 명령과 패키지 메타데이터 정리
 
 요약:

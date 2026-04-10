@@ -65,21 +65,23 @@ async function main(): Promise<void> {
 
   const filteredCurrent = await renderModelCatalogs(config, 'current', { query: 'qwen' });
   assert(
-    filteredCurrent.includes('filter       qwen'),
-    'Expected filtered current model output to show the active query.'
+    filteredCurrent.includes('Model catalog') &&
+      filteredCurrent.includes('Overview') &&
+      filteredCurrent.includes('Filter: qwen'),
+    'Expected filtered current model output to show the catalog overview and active query.'
   );
   assert(
-    filteredCurrent.includes('match hints') &&
+    filteredCurrent.includes('Match hints') &&
       filteredCurrent.includes('Qwen'),
     'Expected filtered current model output to include family hints.'
   );
 
   const filteredCodex = await renderModelCatalogs(config, 'codex', { query: 'gpt-5' });
   assert(
-    filteredCodex.includes('provider     codex') &&
-      filteredCodex.includes('filter       gpt-5') &&
-      filteredCodex.includes('match hints'),
-    'Expected codex model search output to show the provider, filter, and hints.'
+    filteredCodex.includes('Provider: codex') &&
+      filteredCodex.includes('Filter: gpt-5') &&
+      filteredCodex.includes('Match hints'),
+    'Expected codex model search output to show the provider overview, filter, and hints.'
   );
 
   const missingMatches = await renderModelCatalogs(config, 'codex', { query: 'does-not-exist' });
@@ -106,14 +108,15 @@ async function main(): Promise<void> {
     }),
   });
   assert(
-    doctorAll.includes('mode         doctor') &&
-      doctorAll.includes('provider     ollama') &&
-      doctorAll.includes('provider     openai') &&
-      doctorAll.includes('provider     codex'),
-    'Expected model doctor output to render one section per provider.'
+    doctorAll.includes('Provider diagnostics') &&
+      doctorAll.includes('Mode: doctor') &&
+      doctorAll.includes('Provider: ollama') &&
+      doctorAll.includes('Provider: openai') &&
+      doctorAll.includes('Provider: codex'),
+    'Expected model doctor output to render one section per provider with the new overview layout.'
   );
   assert(
-    doctorAll.includes('status       blocked') &&
+    doctorAll.includes('Status: blocked') &&
       doctorAll.includes('API key'),
     'Expected OpenAI doctor output to explain missing API key failures.'
   );
@@ -126,7 +129,7 @@ async function main(): Promise<void> {
     }),
   });
   assert(
-      doctorCurrent.includes('status       ready') &&
+      doctorCurrent.includes('Status: ready') &&
       doctorCurrent.includes('installed models'),
     'Expected current-provider doctor output to show a ready Ollama installation.'
   );
@@ -148,7 +151,7 @@ async function main(): Promise<void> {
   );
   assert(
     invalidOpenAiDoctor.includes('Skipped the live /models probe') &&
-      invalidOpenAiDoctor.includes('status       blocked'),
+      invalidOpenAiDoctor.includes('Status: blocked'),
     'Expected OpenAI doctor output to skip live probing when the base URL is invalid.'
   );
 
@@ -285,6 +288,8 @@ async function main(): Promise<void> {
   );
   assert(
     ollamaPreflight.status === 'warning' &&
+      ollamaPreflightText.includes('Target') &&
+      ollamaPreflightText.includes('Status: warning') &&
       ollamaPreflightText.includes('installed models') &&
       ollamaPreflightText.includes('ollama pull qwen3-coder:30b'),
     'Expected Ollama runtime preflight to warn when the selected model is not installed locally.'

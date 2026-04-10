@@ -198,6 +198,15 @@ function currentModelLabel(model: string): string {
   return model.trim() || '(provider default)';
 }
 
+function buildSection(title: string, lines: Array<string | undefined>): string[] {
+  const content = lines.filter((line): line is string => Boolean(line));
+  if (content.length === 0) {
+    return [];
+  }
+
+  return [title, ...content.map((line) => `- ${line}`)];
+}
+
 function normalizeModelSearchQuery(query: string): string {
   return query.trim().toLowerCase();
 }
@@ -687,21 +696,22 @@ async function buildProviderDiagnostics(
 }
 
 function renderProviderDiagnostics(diagnostics: ProviderDiagnostics): string {
-  const lines = [
-    `provider     ${diagnostics.provider}`,
-    'mode         doctor',
-    `status       ${diagnostics.status}`,
-    `current      ${currentModelLabel(diagnostics.currentModel)}`,
-  ];
+  const lines = ['Provider diagnostics'];
 
-  if (diagnostics.provider !== 'codex') {
-    lines.push(`baseUrl      ${diagnostics.baseUrl || '(not set)'}`);
-  }
+  lines.push(
+    '',
+    ...buildSection('Overview', [
+      `Provider: ${diagnostics.provider}`,
+      'Mode: doctor',
+      `Status: ${diagnostics.status}`,
+      `Current model: ${currentModelLabel(diagnostics.currentModel)}`,
+      diagnostics.provider !== 'codex' ? `Base URL: ${diagnostics.baseUrl || '(not set)'}` : undefined,
+    ])
+  );
 
-  lines.push('checks');
+  lines.push('', 'Checks');
   for (const check of diagnostics.checks) {
-    const prefix = `${check.level.padEnd(5)} ${check.label}`;
-    lines.push(`- ${prefix}: ${check.detail}`);
+    lines.push(`- [${check.level}] ${check.label}: ${check.detail}`);
     if (check.hint) {
       lines.push(`  hint: ${check.hint}`);
     }
@@ -741,14 +751,19 @@ function renderCatalog(catalog: ProviderModelCatalog, options: RenderCatalogOpti
   const filteredModels = options.query
     ? catalog.models.filter((model) => matchesModelQuery(model, options.query!))
     : catalog.models;
-  const lines = [
-    `provider     ${catalog.provider}`,
-    `current      ${currentModelLabel(catalog.currentModel)}`,
-    `default      ${currentModelLabel(catalog.defaultModel)}`,
-    ...(options.query ? [`filter       ${options.query}`] : []),
-    'available',
-  ];
+  const lines = ['Model catalog'];
 
+  lines.push(
+    '',
+    ...buildSection('Overview', [
+      `Provider: ${catalog.provider}`,
+      `Current model: ${currentModelLabel(catalog.currentModel)}`,
+      `Default model: ${currentModelLabel(catalog.defaultModel)}`,
+      options.query ? `Filter: ${options.query}` : undefined,
+    ])
+  );
+
+  lines.push('', `Available models (${filteredModels.length})`);
   if (filteredModels.length === 0) {
     lines.push(options.query ? '- (no models matched this filter)' : '- (no live list available)');
   } else {
@@ -763,14 +778,14 @@ function renderCatalog(catalog: ProviderModelCatalog, options: RenderCatalogOpti
   const insights = [...new Set(insightSeed.flatMap((model) => describeModelFamily(catalog.provider, model)))];
 
   if (insights.length > 0) {
-    lines.push(options.query ? 'match hints' : 'current hint');
+    lines.push('', options.query ? 'Match hints' : 'Current hint');
     for (const insight of insights) {
       lines.push(`- ${insight}`);
     }
   }
 
   if (catalog.notes.length > 0) {
-    lines.push('notes');
+    lines.push('', 'Notes');
     for (const note of catalog.notes) {
       lines.push(`- ${note}`);
     }
@@ -942,20 +957,26 @@ export function renderRuntimeTransitionPreflight(
 ): string {
   // Preflight output is shared by direct runtime edits, profile loads, and runtime-aware resume, so
   // the user sees one stable warning format before any reset happens.
-  const lines = [
-    'Runtime transition preflight',
-    `target       provider=${nextConfig.provider}, model=${nextConfig.model || '(provider default)'}, workdir=${nextConfig.workdir}`,
-    `status       ${preflight.status}`,
-  ];
+  const lines = ['Runtime transition preflight'];
+
+  lines.push(
+    '',
+    ...buildSection('Target', [
+      `Provider: ${nextConfig.provider}`,
+      `Model: ${nextConfig.model || '(provider default)'}`,
+      `Workdir: ${nextConfig.workdir}`,
+      `Status: ${preflight.status}`,
+    ])
+  );
 
   if (preflight.issues.length === 0) {
-    lines.push('No obvious readiness issues detected.');
+    lines.push('', ...buildSection('Checks', ['No obvious readiness issues detected.']));
     return lines.join('\n');
   }
 
-  lines.push('checks');
+  lines.push('', 'Checks');
   for (const issue of preflight.issues) {
-    lines.push(`- ${issue.level.padEnd(5)} ${issue.label}: ${issue.detail}`);
+    lines.push(`- [${issue.level}] ${issue.label}: ${issue.detail}`);
     if (issue.hint) {
       lines.push(`  hint: ${issue.hint}`);
     }
