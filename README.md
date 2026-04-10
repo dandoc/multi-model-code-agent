@@ -41,11 +41,15 @@ This is an MVP, so the focus is clarity and learnability over raw power.
 - `docs/claude-code-inspiration.md` explains what this project borrows conceptually from Claude Code and what it does not copy.
 - `docs/milestones.md` tracks the current roadmap and milestone definitions.
 - `docs/development-log.md` records important project changes, decisions, and known issues.
+- `docs/supported-runtime-matrix.md` defines which provider/model combinations are treated as primary, secondary, or experimental.
+- `docs/release-checklist.md` is the release-readiness checklist for this CLI repository.
 - Korean companions are available in:
   - `README.ko.md`
   - `docs/claude-code-inspiration.ko.md`
   - `docs/milestones.ko.md`
   - `docs/development-log.ko.md`
+  - `docs/supported-runtime-matrix.ko.md`
+  - `docs/release-checklist.ko.md`
 
 ## How it works
 
@@ -145,6 +149,21 @@ Notes:
 - the built CLI now includes a `#!/usr/bin/env node` shebang so it can be launched as a real command after `npm link` or `npm install -g .`
 - `package.json` is still marked `private`, so this is a local install/release-readiness path, not an npm publish workflow yet
 - run `npm run smoke:packaging` to verify the built CLI entrypoint and `--help` path
+- run `npm run smoke:release` for the tighter release-readiness gate used for CLI closeout
+- see `docs/release-checklist.md` for the full manual + scripted release gate
+
+## Supported real-world combinations
+
+The current CLI project does not claim universal support for every model that can fit an adapter.
+
+The primary day-to-day supported paths are:
+
+- `ollama` with `qwen3-coder:30b` on Windows
+- `codex` with `gpt-5.4` on Windows
+
+Secondary compatibility support exists for OpenAI-compatible backends and nearby local coding families such as `Qwen2.5` or `Gemma`, but the current release bar is centered on the two primary paths above.
+
+See `docs/supported-runtime-matrix.md` for the current support tiers and release assumptions.
 
 ## REPL commands
 
@@ -229,6 +248,22 @@ This runs:
 - a provider-readiness doctor regression check
 - a live-provider smoke-matrix regression check
 - a JSON/tool-call normalization regression check
+
+For release-readiness instead of the full broad smoke chain, use:
+
+```bash
+npm run smoke:release
+```
+
+That tighter gate runs:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:packaging`
+- `npm run smoke:approvals`
+- `npm run smoke:repl`
+- `npm run smoke:models`
+- `npm run smoke:live-matrix`
 
 For a focused shell-selection regression check, run:
 

@@ -42,11 +42,15 @@
   - `docs/claude-code-inspiration.md`
   - `docs/milestones.md`
   - `docs/development-log.md`
+  - `docs/supported-runtime-matrix.md`
+  - `docs/release-checklist.md`
 - 한국어 동반 문서
   - `README.ko.md`
   - `docs/claude-code-inspiration.ko.md`
   - `docs/milestones.ko.md`
   - `docs/development-log.ko.md`
+  - `docs/supported-runtime-matrix.ko.md`
+  - `docs/release-checklist.ko.md`
 
 ## 동작 방식
 
@@ -146,6 +150,21 @@ mm-agent --help
 - build된 CLI에는 `#!/usr/bin/env node` shebang이 포함되어 있어 `npm link` 또는 `npm install -g .` 뒤 실제 명령처럼 실행할 수 있습니다
 - 아직 `package.json`은 `private` 상태이므로, 지금 단계는 npm publish가 아니라 로컬 설치 및 릴리스 준비 경로입니다
 - `npm run smoke:packaging`으로 build된 CLI 엔트리포인트와 `--help` 경로를 검증할 수 있습니다
+- `npm run smoke:release`는 CLI 마감에 쓰는 더 촘촘한 릴리스 준비 게이트입니다
+- 전체 수동/자동 체크 항목은 `docs/release-checklist.ko.md`에 정리합니다
+
+## 현재 실사용 지원 조합
+
+현재 CLI 프로젝트는 adapter에 연결되는 모든 모델을 똑같이 지원한다고 주장하지 않습니다.
+
+현재 일상 실사용 기준의 주 지원 경로는:
+
+- Windows에서 `ollama` + `qwen3-coder:30b`
+- Windows에서 `codex` + `gpt-5.4`
+
+OpenAI-compatible backend와 `Qwen2.5`, `Gemma` 같은 인접 로컬 코딩 모델군은 보조 호환 경로로 다루지만, 현재 릴리스 기준은 위 두 경로를 중심으로 잡습니다.
+
+지원 단계와 릴리스 가정은 `docs/supported-runtime-matrix.ko.md`를 참고하세요.
 
 ## REPL 명령
 
@@ -209,6 +228,22 @@ npm run smoke
 ```
 
 이 명령은 타입체크, 빌드, 저장소 분석 프롬프트, workspace 파일 생성, `.env` persistence, path/session/model/provider/package 검증, JSON/tool-call 정규화 회귀까지 한 번에 점검합니다.
+
+전체 broad smoke 대신 CLI 릴리스 준비 게이트만 빠르게 보고 싶다면:
+
+```bash
+npm run smoke:release
+```
+
+이 경로는 다음을 실행합니다.
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:packaging`
+- `npm run smoke:approvals`
+- `npm run smoke:repl`
+- `npm run smoke:models`
+- `npm run smoke:live-matrix`
 
 특정 검증만 보고 싶다면 예를 들면:
 

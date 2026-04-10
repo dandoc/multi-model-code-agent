@@ -725,3 +725,20 @@ Validation:
 
 - doc-only change
 - `npm run smoke:packaging`
+
+### 2026-04-10 - Release-readiness docs and support matrix
+
+Summary:
+
+- added `docs/release-checklist.md` and `docs/release-checklist.ko.md` so the CLI closeout now has an explicit release gate instead of relying on scattered README notes
+- added `docs/supported-runtime-matrix.md` and `docs/supported-runtime-matrix.ko.md` to document which provider/model combinations are treated as primary, secondary, or experimental
+- added `npm run smoke:release` as a tighter release-readiness command that focuses on build, packaging, approvals, REPL command parsing, model diagnostics, and live-smoke regressions
+- updated both READMEs and milestone docs so the documented release path now matches the actual project stage
+
+Validation:
+
+- doc/script change
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:packaging`
+- `npm run smoke:release`

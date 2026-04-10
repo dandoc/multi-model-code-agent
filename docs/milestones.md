@@ -117,12 +117,13 @@ Completed so far:
 - simplified approval prompts
 - sectioned session/profile result views
 - packaging smoke for the built CLI entrypoint
+- release checklist documentation
+- supported runtime matrix documentation
+- `smoke:release` for release-readiness closeout
 
 Still remaining:
 
 - final output consistency polish across remaining commands
-- release/install docs cleanup
-- packaging and release checklist tightening
 - optional TUI/GUI preparation after CLI output contracts settle
 
 ## Current focus

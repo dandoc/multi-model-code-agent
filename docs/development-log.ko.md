@@ -360,3 +360,20 @@
 
 - 문서 변경
 - `npm run smoke:packaging`
+
+### 릴리스 준비 문서와 지원 runtime 매트릭스
+
+요약:
+
+- CLI 마감 기준을 README의 흩어진 설명에만 두지 않도록 `docs/release-checklist.md`, `docs/release-checklist.ko.md`를 추가
+- 어떤 provider/model 조합을 주 지원 경로로 볼지 분명히 하기 위해 `docs/supported-runtime-matrix.md`, `docs/supported-runtime-matrix.ko.md`를 추가
+- build, packaging, approvals, REPL parsing, model diagnostics, live-smoke 회귀를 묶어 보는 `npm run smoke:release`를 추가
+- README와 milestone 문서도 현재 프로젝트 단계에 맞게 같이 정리
+
+검증:
+
+- 문서/스크립트 변경
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:packaging`
+- `npm run smoke:release`

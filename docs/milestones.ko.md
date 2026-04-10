@@ -117,12 +117,13 @@
 - approval prompt 단순화
 - session/profile result view 섹션화
 - build된 CLI 엔트리포인트용 packaging smoke
+- release checklist 문서화
+- supported runtime matrix 문서화
+- release-readiness closeout용 `smoke:release`
 
 남은 일:
 
 - 남아 있는 명령 결과 출력의 마지막 일관성 polish
-- release/install 문서 정리
-- packaging/release checklist 강화
 - CLI 출력 계약이 더 안정된 뒤 optional TUI/GUI 준비
 
 ## 현재 집중점
