@@ -55,8 +55,10 @@ Run these checks in addition to the scripted smoke path:
 
 1. `npm run build`
 2. `npm link`
-3. `mm-agent --help`
-4. Start the REPL once and confirm:
+3. `mm-agent --version`
+4. `mm-agent --help`
+5. Start the REPL once and confirm:
+   - `/version`
    - `/help`
    - `/status`
    - `/models doctor`

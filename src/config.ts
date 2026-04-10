@@ -56,16 +56,27 @@ function parseNumber(input: string | boolean | undefined, fallback: number): num
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function parseArgs(argv: string[]): { flags: Record<string, ArgValue>; prompt?: string; showHelp: boolean } {
+function parseArgs(argv: string[]): {
+  flags: Record<string, ArgValue>;
+  prompt?: string;
+  showHelp: boolean;
+  showVersion: boolean;
+} {
   const flags: Record<string, ArgValue> = {};
   const positional: string[] = [];
   let showHelp = false;
+  let showVersion = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
 
     if (token === '--help' || token === '-h') {
       showHelp = true;
+      continue;
+    }
+
+    if (token === '--version' || token === '-v') {
+      showVersion = true;
       continue;
     }
 
@@ -94,7 +105,7 @@ function parseArgs(argv: string[]): { flags: Record<string, ArgValue>; prompt?: 
   const prompt =
     typeof flags.prompt === 'string' ? flags.prompt : positional.join(' ').trim() || undefined;
 
-  return { flags, prompt, showHelp };
+  return { flags, prompt, showHelp, showVersion };
 }
 
 export function resolveValidatedWorkdir(inputPath: string): string {
@@ -190,6 +201,7 @@ export function createConfigFromInputs(argv: string[]): ParsedCliInput {
     config,
     prompt: parsed.prompt,
     showHelp: parsed.showHelp,
+    showVersion: parsed.showVersion,
   };
 }
 

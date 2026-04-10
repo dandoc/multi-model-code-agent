@@ -133,6 +133,7 @@ npm run dev
 
 ```bash
 npm run build
+npm start -- --version
 npm start -- --help
 ```
 
@@ -141,6 +142,7 @@ npm start -- --help
 ```bash
 npm run build
 npm link
+mm-agent --version
 mm-agent --help
 ```
 

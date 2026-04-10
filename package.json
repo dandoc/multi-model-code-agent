@@ -2,7 +2,25 @@
   "name": "multi-model-code-agent",
   "version": "0.1.0",
   "private": true,
-  "description": "A beginner-friendly multi-model coding agent CLI with Ollama and OpenAI-compatible backends.",
+  "description": "Claude Code-inspired multi-model coding agent CLI for Ollama, Codex, and OpenAI-compatible backends.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dandoc/multi-model-code-agent.git"
+  },
+  "homepage": "https://github.com/dandoc/multi-model-code-agent",
+  "bugs": {
+    "url": "https://github.com/dandoc/multi-model-code-agent/issues"
+  },
+  "keywords": [
+    "cli",
+    "agent",
+    "llm",
+    "ollama",
+    "codex",
+    "openai-compatible",
+    "coding-agent",
+    "typescript"
+  ],
   "type": "module",
   "bin": {
     "mm-agent": "dist/index.js"

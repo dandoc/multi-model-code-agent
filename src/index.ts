@@ -70,6 +70,7 @@ import {
   shouldLogHistoryViewCommand,
   shouldLogSessionsViewCommand,
 } from './replCommands.js';
+import { renderProjectVersion } from './projectMetadata.js';
 import { createTools, renderToolCatalog } from './tools.js';
 
 import type { AgentConfig, ModelProvider } from './types.js';
@@ -95,6 +96,7 @@ function printStartupHelp(): void {
       '  --temperature <number>',
       '  --request-timeout-ms <number>',
       '  --prompt "one shot prompt"',
+      '  --version',
       '  --help',
     ].join('\n')
   );
@@ -114,6 +116,7 @@ function printReplHelp(topic: 'overview' | 'runtime' | 'sessions' | 'profiles' |
       'Common commands:',
       '  /config',
       '  /status',
+      '  /version',
       '  /sessions',
       '  /profiles',
       '  /models',
@@ -131,6 +134,7 @@ function printReplHelp(topic: 'overview' | 'runtime' | 'sessions' | 'profiles' |
       'Help: runtime',
       '  /config',
       '  /status',
+      '  /version',
       '  /provider <ollama|openai|codex>',
       '  /model <name>',
       '  /model default',
@@ -226,6 +230,10 @@ function printReplHelp(topic: 'overview' | 'runtime' | 'sessions' | 'profiles' |
   console.log(sections[topic].join('\n'));
 }
 
+function hasCliFlag(argv: string[], flags: readonly string[]): boolean {
+  return argv.some((arg) => flags.includes(arg));
+}
+
 function normalizeProvider(inputValue: string): ModelProvider | null {
   const value = inputValue.trim().toLowerCase();
   if (value === 'ollama') {
@@ -319,13 +327,18 @@ function ensureProviderReady(config: AgentConfig): void {
 // runtime switching, REPL command dispatch, and one-shot prompt execution.
 async function main(): Promise<void> {
   const launchCwd = process.cwd();
-  loadDotEnv(launchCwd);
-
-  const parsed = createConfigFromInputs(process.argv.slice(2));
-  if (parsed.showHelp) {
+  const rawArgv = process.argv.slice(2);
+  if (hasCliFlag(rawArgv, ['--version', '-v'])) {
+    console.log(renderProjectVersion());
+    return;
+  }
+  if (hasCliFlag(rawArgv, ['--help', '-h'])) {
     printStartupHelp();
     return;
   }
+  loadDotEnv(launchCwd);
+
+  const parsed = createConfigFromInputs(rawArgv);
 
   const tools = createTools();
   const rl = createInterface({ input, output });
@@ -481,6 +494,12 @@ async function main(): Promise<void> {
       if (entry === '/config') {
         await logSessionEvent(() => sessionStore.logCommand(entry));
         console.log(`\n${renderConfigSummary(config)}`);
+        continue;
+      }
+
+      if (entry === '/version') {
+        await logSessionEvent(() => sessionStore.logCommand(entry));
+        console.log(`\n${renderProjectVersion()}`);
         continue;
       }
 

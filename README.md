@@ -132,6 +132,7 @@ If you want a built CLI entrypoint instead of `npm run dev`, use:
 
 ```bash
 npm run build
+npm start -- --version
 npm start -- --help
 ```
 
@@ -140,6 +141,7 @@ For a local global install from this checkout:
 ```bash
 npm run build
 npm link
+mm-agent --version
 mm-agent --help
 ```
 

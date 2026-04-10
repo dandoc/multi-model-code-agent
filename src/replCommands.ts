@@ -217,6 +217,7 @@ const COMMAND_HELP_TOPICS: Readonly<Record<string, HelpTopic>> = {
   '/help': 'overview',
   '/config': 'runtime',
   '/status': 'runtime',
+  '/version': 'runtime',
   '/history': 'sessions',
   '/resume': 'sessions',
   '/sessions': 'sessions',
@@ -674,6 +675,14 @@ export function shouldLogSessionsViewCommand(request: SessionsRequest): boolean 
 }
 
 export function normalizeReplCommandAlias(entry: string): string {
+  if (entry === '/v') {
+    return '/version';
+  }
+
+  if (entry.startsWith('/v ')) {
+    return `/version ${entry.slice('/v '.length)}`;
+  }
+
   if (entry === '/?') {
     return '/help';
   }

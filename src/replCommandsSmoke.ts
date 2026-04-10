@@ -35,6 +35,7 @@ async function main(): Promise<void> {
     'Expected /profile subcommand alias to normalize.'
   );
   assert(normalizeReplCommandAlias('/?') === '/help', 'Expected /? to normalize to /help.');
+  assert(normalizeReplCommandAlias('/v') === '/version', 'Expected /v to normalize to /version.');
   assert(
     normalizeReplCommandAlias('/? sessions') === '/help sessions',
     'Expected topic help alias to normalize.'
@@ -81,6 +82,10 @@ async function main(): Promise<void> {
   assert(
     getHelpTopicForCommand('/models') === 'models',
     'Expected command-to-help-topic mapping for /models.'
+  );
+  assert(
+    getHelpTopicForCommand('/version') === 'runtime',
+    'Expected command-to-help-topic mapping for /version.'
   );
 
   assert(isWholeNumberText('10') === true, 'Expected plain digits to count as a whole number.');

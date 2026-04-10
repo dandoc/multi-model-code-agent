@@ -75,4 +75,5 @@ export interface ParsedCliInput {
   config: AgentConfig;
   prompt?: string;
   showHelp: boolean;
+  showVersion: boolean;
 }

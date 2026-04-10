@@ -3,6 +3,23 @@
 
 이 문서는 `docs/development-log.md`의 한국어 동반 문서입니다. 영문 로그를 그대로 기계적으로 옮기기보다, 실제 변경의 의미가 읽히도록 날짜별 주요 흐름을 정리했습니다.
 
+## 2026-04-10
+
+### CLI 버전 명령과 패키지 메타데이터 정리
+
+요약:
+
+- 빌드된 CLI와 REPL 양쪽에서 현재 패키지 버전을 볼 수 있도록 `--version`과 `/version` 추가
+- `smoke:packaging`에 패키지 이름/버전 검증 연결
+- 공개된 GitHub 저장소 기준으로 `description`, `repository`, `homepage`, `bugs`, `keywords` 정리
+
+검증:
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke:packaging`
+- `npm run smoke:repl`
+
 ## 2026-04-07
 
 ### 초기 MVP 부트스트랩

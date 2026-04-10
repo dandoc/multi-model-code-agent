@@ -55,8 +55,10 @@ npm run smoke:live -- current all
 
 1. `npm run build`
 2. `npm link`
-3. `mm-agent --help`
-4. REPL을 한 번 띄운 뒤 다음 확인
+3. `mm-agent --version`
+4. `mm-agent --help`
+5. REPL을 한 번 띄운 뒤 다음 확인
+   - `/version`
    - `/help`
    - `/status`
    - `/models doctor`
